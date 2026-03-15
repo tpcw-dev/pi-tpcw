@@ -29,10 +29,10 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { convertToLlm, serializeConversation } from "@mariozechner/pi-coding-agent";
 import { complete } from "@mariozechner/pi-ai";
 import { Text } from "@mariozechner/pi-tui";
-import { readFile, access } from "node:fs/promises";
-import { constants } from "node:fs";
+import { readFile, access, copyFile, mkdir } from "node:fs/promises";
+import { constants, existsSync } from "node:fs";
 import { execSync } from "node:child_process";
-import { resolve, basename } from "node:path";
+import { resolve, basename, dirname } from "node:path";
 import { homedir } from "node:os";
 
 // ---------------------------------------------------------------------------
@@ -240,6 +240,33 @@ function expandHome(p: string): string {
     return resolve(homedir(), p.slice(2));
   }
   return resolve(p);
+}
+
+/**
+ * Install bundled agent definitions to ~/.pi/agent/agents/ if they don't
+ * already exist. Agents ship in pi-tpcw/agents/ and are copied on first
+ * session_start so subagent discovery finds them.
+ */
+async function installBundledAgents(): Promise<void> {
+  const bundledDir = resolve(dirname(dirname(__dirname)), "agents");
+  const targetDir = resolve(homedir(), ".pi", "agent", "agents");
+
+  if (!existsSync(bundledDir)) return;
+
+  try {
+    await mkdir(targetDir, { recursive: true });
+    const { readdirSync } = await import("node:fs");
+    const files = readdirSync(bundledDir).filter((f: string) => f.endsWith(".md"));
+
+    for (const file of files) {
+      const target = resolve(targetDir, file);
+      if (!existsSync(target)) {
+        await copyFile(resolve(bundledDir, file), target);
+      }
+    }
+  } catch {
+    // Non-fatal — agents are a convenience, not a requirement
+  }
 }
 
 async function loadConfig(): Promise<VaultConfig | null> {
@@ -510,6 +537,9 @@ export default function vaultGuard(pi: ExtensionAPI) {
 
     // Load externalized persona/rules from data/vault-knowledge.md
     await loadVaultKnowledge();
+
+    // Install bundled agent definitions to ~/.pi/agent/agents/ if missing
+    await installBundledAgents();
 
     state = await detectState();
 
