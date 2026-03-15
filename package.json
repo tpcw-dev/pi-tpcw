@@ -20,7 +20,9 @@
       "skills/vault-status",
       "skills/vault-todo",
       "skills/vault-update",
-      "skills/vault-diagram"
+      "skills/vault-diagram",
+      "skills/draw-diagram",
+      "skills/train-skill-in-loop-manual"
     ]
   },
   "peerDependencies": {

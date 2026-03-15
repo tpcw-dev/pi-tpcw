@@ -1,196 +1,132 @@
 ---
 name: vault-diagram
-description: Create and update Excalidraw diagrams in the vault, viewable via the Obsidian Excalidraw plugin. Use when user wants to visualize workflows, architecture, vault structure, or any system design. Triggers on "create diagram", "draw architecture", "vault diagram", "visualize workflow", "excalidraw", "update diagram".
+description: Create and update Excalidraw diagrams in the vault. Gathers vault context, prepares a design document, then delegates to draw-diagram for rendering. Triggers on "vault diagram", "visualize vault", "create vault diagram", "update vault diagram".
 ---
 
-# Vault Diagram — Excalidraw Generator
+# Vault Diagram — Orchestrator
 
-Create and maintain `.excalidraw.md` diagrams in the vault, viewable and editable via the Obsidian Excalidraw plugin.
+Gathers vault context, prepares a design document, then delegates to `draw-diagram` for rendering. Handles vault-specific placement and git commits.
 
-## Prerequisites
-
-- Vault must be initialized
-- Obsidian Excalidraw plugin must be installed in the vault
-
-## Reference Data
-
-**BEFORE generating any diagram**, load the reference file:
-
-```
-Read: {skill_dir}/data/excalidraw-reference.md
-```
-
-This contains the JSON schema, element templates, color palette, `.excalidraw.md` file format, and design principles.
+For non-vault diagrams, use `draw-diagram` directly.
 
 ## Inputs
 
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `name` | ✅ YES | — | Diagram slug (kebab-case, e.g. `vault-workflow-overview`) |
-| `project` | No | `_system` | Project name or `_system` for cross-project diagrams |
+| `name` | ✅ YES | — | Diagram slug (kebab-case) |
+| `project` | No | `_system` | Project name or `_system` for cross-project |
 | `description` | ✅ YES | — | What to visualize (natural language) |
-| `type` | No | `architecture` | `flowchart`, `architecture`, `workflow`, `entity-relationship`, `concept` |
-| `depth` | No | `simple` | `simple` (conceptual) or `comprehensive` (technical with evidence artifacts) |
+| `type` | No | `architecture` | Passed to draw-diagram |
+| `depth` | No | `simple` | Passed to draw-diagram |
 
-If `name` is missing, ask: *"What should this diagram be called? (kebab-case slug)"*
-If `description` is missing, ask: *"What should this diagram visualize?"*
+## Target Paths
 
-## Mode Detection
+| Scope | Diagram Path | Design Doc Path |
+|-------|-------------|-----------------|
+| System-wide | `_system/diagrams/{name}.excalidraw.md` | `_system/diagrams/{name}.design.md` |
+| Project | `projects/{project}/diagrams/{name}.excalidraw.md` | `projects/{project}/diagrams/{name}.design.md` |
 
-- **Create Mode** — Target `.excalidraw.md` file does NOT exist → generate from scratch
-- **Update Mode** — Target `.excalidraw.md` file EXISTS → read existing, modify, re-write
+## Process
 
-## Target Path
+### Step 1: Gather Vault Context
 
-| Scope | Path |
-|-------|------|
-| System-wide | `_system/diagrams/{name}.excalidraw.md` |
-| Project-specific | `projects/{project}/diagrams/{name}.excalidraw.md` |
+Query the vault for relevant context based on `description`:
 
----
-
-## Create Mode
-
-### Step 1: Design (Before Any JSON)
-
-Follow the design process from the reference:
-
-1. **Assess depth** — simple/conceptual or comprehensive/technical?
-2. **Understand deeply** — what does each concept DO? What relationships exist?
-3. **Map concepts to patterns** — fan-out, convergence, timeline, tree, cycle, assembly line, side-by-side, gap
-4. **Ensure variety** — each major concept uses a different visual pattern
-5. **Sketch the flow** — trace how the eye moves through the diagram
-
-Output a brief design plan before generating JSON.
-
-### Step 2: Generate Excalidraw JSON
-
-Build the JSON **section by section** (never all at once for large diagrams):
-
-1. Start with the base structure:
-```json
-{
-  "type": "excalidraw",
-  "version": 2,
-  "source": "https://excalidraw.com",
-  "elements": [],
-  "appState": {
-    "viewBackgroundColor": "#ffffff",
-    "gridSize": 20
-  },
-  "files": {}
-}
+```bash
+obsidian vault="{vault_name}" search query="{relevant terms}" format=json
 ```
 
-2. Add elements section by section using templates from the reference
-3. Use **descriptive string IDs** (e.g., `"sage_rect"`, `"arrow_scan_to_update"`)
-4. **Namespace seeds by section** (section 1 = 100xxx, section 2 = 200xxx)
-5. Ensure all bindings are bidirectional (arrow ↔ shape, text ↔ container)
-6. Apply semantic colors from the palette
+Also gather structural info:
+- Project list and entry counts
+- Relevant decisions, todos, patterns
+- Existing diagrams in the target location
 
-### Step 3: Wrap in `.excalidraw.md` Format
+### Step 2: Prepare Design Document
+
+Create a markdown design doc that captures everything `draw-diagram` needs:
 
 ```markdown
----
-excalidraw-plugin: parsed
-tags: [excalidraw]
----
+# {name} — Design Document
 
-%%
-# Drawing
-```json
-{EXCALIDRAW_JSON_HERE}
-```
-%%
-```
+## Goal
+{description}
 
-### Step 4: Write to Vault
+## Current State
+{gathered vault context — entities, relationships, structure}
 
-Create the diagram directory if needed and write the file:
+## Entities
+- Entity 1: description, role
+- Entity 2: description, role
+...
 
-```bash
-mkdir -p "{vault_path}/{target_dir}"
-```
+## Relationships
+- Entity 1 → Entity 2: relationship description
+...
 
-Write the `.excalidraw.md` file using the Write tool (NOT MCP-Vault — `.excalidraw.md` files are not standard markdown notes).
+## Flow / Sequence
+1. Step description
+2. Step description
+...
 
-### Step 5: Validate (Optional but Recommended)
-
-For visual validation, extract the JSON and render:
-
-```bash
-# Extract JSON from .excalidraw.md to temp file
-cd ~/references/excalidraw-diagram-skill/references
-
-# Create temp .excalidraw file with just the JSON
-uv run python render_excalidraw.py /tmp/diagram-validate.excalidraw
+## Notes
+- Additional context for the renderer
 ```
 
-View the PNG output and fix any issues (overlapping text, misaligned arrows, spacing).
+### Step 3: Persist Design Document
 
-### Step 6: Git Commit
+Write the design doc to the vault alongside the diagram target:
+
+```
+{target_dir}/{name}.design.md
+```
+
+This enables future updates without re-gathering context.
+
+### Step 4: Invoke draw-diagram
+
+Delegate to `draw-diagram` with:
+- `context`: the design document (path or content)
+- `name`: the diagram slug
+- `output_path`: the vault diagram path
+- `type`: passed through
+- `depth`: passed through
+
+### Step 5: Git Commit
 
 ```bash
 cd {vault_path}
 git add .
-git diff --cached --quiet || git commit -m "vault: add - diagram {name}"
+git diff --cached --quiet || git commit -m "vault: add - diagram {name} + design doc"
 ```
-
----
 
 ## Update Mode
 
-### Step 1: Read Existing Diagram
+If the diagram already exists:
+1. Read the existing design doc (`{name}.design.md`)
+2. Update it with new context or changes
+3. Re-invoke `draw-diagram` with updated design doc
+4. Git commit: `vault: update - diagram {name}`
 
-Read the `.excalidraw.md` file and extract the JSON block from between `%%` delimiters.
-
-### Step 2: Modify Elements
-
-Parse the JSON, make targeted changes:
-- Add new elements (append to `elements` array)
-- Update positions (`x`, `y`), sizes (`width`, `height`), or text
-- Add/remove arrows (update bindings on both ends)
-- Change colors (use semantic palette)
-
-### Step 3: Re-wrap and Write
-
-Rebuild the `.excalidraw.md` file with updated JSON and write back.
-
-### Step 4: Git Commit
-
-```bash
-cd {vault_path}
-git add .
-git diff --cached --quiet || git commit -m "vault: update - diagram {name}"
-```
-
----
-
-## Summary Output
+## Summary
 
 ```
 ═══════════════════════════════════════
-  VAULT DIAGRAM: {Create|Update} Complete
+  VAULT DIAGRAM: Complete
 ═══════════════════════════════════════
-  Diagram:    {target_path}
-  Name:       {name}
-  Type:       {type}
-  Elements:   {count} elements
+  Diagram:    {diagram_path}
+  Design Doc: {design_doc_path}
   Scope:      {system | project}
-  Git:        {✓ committed | ⏭️ skipped | ⚠️ failed}
+  Git:        {✓ committed | ⚠️ failed}
 
   View in Obsidian: Open {name}.excalidraw.md
+  To iterate: use train-skill-in-loop-manual with draw-diagram
 ═══════════════════════════════════════
 ```
 
 ## Rules
 
-- ALWAYS load `data/excalidraw-reference.md` before generating diagrams
-- ALWAYS use descriptive element IDs (never `elem1`, `arrow2`)
-- ALWAYS ensure bidirectional bindings (arrow ↔ shape, text ↔ container)
-- ALWAYS use the semantic color palette from the reference
-- ALWAYS write `.excalidraw.md` files via Write tool (not MCP-Vault)
-- ALWAYS set `roughness: 0` for clean modern diagrams (unless hand-drawn requested)
-- NEVER generate all JSON in one pass for large diagrams — build section by section
-- NEVER use transparency (`opacity` must be 100)
-- NEVER put formatting in the `text` property — readable words only
+- ALWAYS prepare a design document before drawing
+- ALWAYS persist the design doc alongside the diagram
+- ALWAYS delegate rendering to draw-diagram (never generate JSON directly)
+- ALWAYS git commit after writing
+- Use draw-diagram's output summary to confirm success
