@@ -22,7 +22,8 @@
       "skills/vault-update",
       "skills/vault-diagram",
       "skills/draw-diagram",
-      "skills/train-skill-in-loop-manual"
+      "skills/train-skill-in-loop-manual",
+      "skills/search-agents"
     ]
   },
   "peerDependencies": {
