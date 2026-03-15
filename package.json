@@ -1,0 +1,33 @@
+{
+  "name": "pi-tpcw",
+  "version": "0.1.0",
+  "description": "Persistent vault knowledge management for pi",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "pi": {
+    "extensions": [
+      "extensions/vault-guard"
+    ],
+    "skills": [
+      "skills/vault-init",
+      "skills/vault-scan",
+      "skills/vault-context",
+      "skills/vault-review",
+      "skills/vault-status",
+      "skills/vault-todo",
+      "skills/vault-update"
+    ]
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-agent-core": "*",
+    "@mariozechner/pi-ai": "*",
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*",
+    "@sinclair/typebox": "*"
+  },
+  "devDependencies": {
+    "@marcfargas/pi-test-harness": "^0.5.0",
+    "vitest": "^4.1.0"
+  }
+}
