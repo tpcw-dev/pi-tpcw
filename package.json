@@ -10,7 +10,8 @@
       "extensions/vault-guard",
       "extensions/loop",
       "extensions/skills-browser",
-      "extensions/plan-mode"
+      "extensions/plan-mode",
+      "node_modules/@mjakl/pi-subagent"
     ],
     "skills": [
       "skills/vault-init",
@@ -26,6 +27,12 @@
       "skills/search-agents"
     ]
   },
+  "dependencies": {
+    "@mjakl/pi-subagent": "^1.2.0"
+  },
+  "bundledDependencies": [
+    "@mjakl/pi-subagent"
+  ],
   "peerDependencies": {
     "@mariozechner/pi-agent-core": "*",
     "@mariozechner/pi-ai": "*",
