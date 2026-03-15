@@ -131,8 +131,8 @@ describe("package.json manifest", () => {
   // ── Cross-check: declared counts ──────────────────────────────────────
 
   describe("declared counts", () => {
-    it("declares exactly 1 extension", () => {
-      expect(pkg.pi.extensions).toHaveLength(1);
+    it("declares exactly 4 extensions", () => {
+      expect(pkg.pi.extensions).toHaveLength(4);
     });
 
     it("declares exactly 7 skills", () => {

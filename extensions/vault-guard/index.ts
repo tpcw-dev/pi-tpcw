@@ -6,29 +6,33 @@
  *
  * State Machine:
  *   no-vault       — No vault-config.json found. Nudges user to /vault-setup.
- *   vault-exists   — Config found and vault path exists, but MCP not reachable.
- *   connected      — Vault path exists AND MCP tools are responsive.
+ *   vault-exists   — Config found and vault path exists, but Obsidian CLI not reachable.
+ *   connected      — Vault path exists AND Obsidian CLI is responsive.
  *
  * Hooks:
- *   session_start        — Detect state, set footer
- *   before_agent_start   — Inject system prompt (rules / Sage persona)
- *   tool_call            — Track vault MCP calls, update footer
+ *   session_start        — Detect state, query vault context, set footer, restore captures
+ *   before_agent_start   — Inject system prompt (rules / Sage persona / vault context)
+ *   tool_call            — Track vault CLI calls via bash, update footer
  *   tool_result          — Restore footer after transient search status
- *   session_before_compact — (reserved for future enrichment)
+ *   session_before_compact — Enhanced compaction with knowledge extraction sections
  *
  * Commands:
- *   /vault-todo   — Show current vault todo tracking status
- *   /vault-setup  — Guide user through vault configuration
+ *   /vault-todo    — Show current vault todo tracking status
+ *   /vault-capture — Capture knowledge for vault during session
+ *   /vault-setup   — Guide user through vault configuration
  *
  * Usage:
  *   pi -e pi-tpcw/extensions/vault-guard
  */
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { convertToLlm, serializeConversation } from "@mariozechner/pi-coding-agent";
+import { complete } from "@mariozechner/pi-ai";
 import { Text } from "@mariozechner/pi-tui";
 import { readFile, access } from "node:fs/promises";
 import { constants } from "node:fs";
-import { resolve } from "node:path";
+import { execSync } from "node:child_process";
+import { resolve, basename } from "node:path";
 import { homedir } from "node:os";
 
 // ---------------------------------------------------------------------------
@@ -39,6 +43,8 @@ type VaultState = "no-vault" | "vault-exists" | "connected";
 
 interface VaultConfig {
   vault_path?: string;
+  vault_name?: string;
+  cli_path?: string;
   [key: string]: unknown;
 }
 
@@ -47,45 +53,39 @@ interface VaultConfig {
 // ---------------------------------------------------------------------------
 
 const CONFIG_PATH = resolve(homedir(), ".pi", "agent", "vault-config.json");
+const DEFAULT_CLI_PATH = "/Applications/Obsidian.app/Contents/MacOS/Obsidian";
 
 const STATUS_ID = "vault-guard";
 
 const FOOTER: Record<VaultState, string> = {
   "no-vault": "🔮 No vault configured — /vault-setup",
-  "vault-exists": "🔮 Vault found (offline)",
+  "vault-exists": "🔮 Vault found (Obsidian offline)",
   connected: "🔮 Vault connected",
 };
+
+// ---------------------------------------------------------------------------
+// CLI state — resolved from vault-config.json at runtime
+// ---------------------------------------------------------------------------
+
+let vaultName: string | null = null;
+let cliPath: string = DEFAULT_CLI_PATH;
 
 // ---------------------------------------------------------------------------
 // Vault knowledge — loaded from data/vault-knowledge.md at runtime
 // ---------------------------------------------------------------------------
 
-/**
- * Path to the externalized vault knowledge file.
- * Resolved relative to the extension's own location (two dirs up → pi-tpcw/).
- */
 const VAULT_KNOWLEDGE_PATH = resolve(
   __dirname, "..", "..", "data", "vault-knowledge.md",
 );
 
-/**
- * Parsed sections from vault-knowledge.md, keyed by section name.
- * Populated once by loadVaultKnowledge() during session_start.
- */
 const knowledgeSections: Record<string, string> = {};
 
-/**
- * Load and parse vault-knowledge.md, splitting on <!-- SECTION: name --> markers.
- * Populates knowledgeSections. Falls back to hardcoded defaults on read failure.
- */
 async function loadVaultKnowledge(): Promise<void> {
-  // Clear any stale keys from a prior load (e.g. multiple session_start calls)
   for (const key of Object.keys(knowledgeSections)) delete knowledgeSections[key];
 
   try {
     const raw = await readFile(VAULT_KNOWLEDGE_PATH, "utf-8");
 
-    // Split on section markers: <!-- SECTION: NAME -->
     const sectionRegex = /<!--\s*SECTION:\s*(\w+)\s*-->/g;
     let match: RegExpExecArray | null;
     const markers: { name: string; end: number }[] = [];
@@ -105,7 +105,6 @@ async function loadVaultKnowledge(): Promise<void> {
     // File not found or unreadable — fall through to defaults
   }
 
-  // Apply defaults for any missing sections
   if (!knowledgeSections.SAGE_PERSONA) {
     knowledgeSections.SAGE_PERSONA = DEFAULT_SAGE_PERSONA;
   }
@@ -147,30 +146,81 @@ You MUST follow this protocol for every task:
 
 ### Before Starting Work
 1. Search vault for existing todos related to your task:
-   mcp({ tool: "vault_search_notes", args: '{"query": "<task topic>", "searchFrontmatter": true, "limit": 10}' })
+   \`\`\`bash
+   obsidian vault="<vault-name>" search query="<task topic>" format=json
+   \`\`\`
 2. If a matching todo exists, update its stage to "in-progress":
-   mcp({ tool: "vault_update_frontmatter", args: '{"path": "<todo-path>", "frontmatter": {"stage": "in-progress"}}' })
+   \`\`\`bash
+   obsidian vault="<vault-name>" property:set file="<todo-name>" name="stage" value="in-progress"
+   \`\`\`
 3. Only create a new todo if no existing one covers the same scope.
 
 ### After Completing Work
 4. Update the todo stage to "review":
-   mcp({ tool: "vault_update_frontmatter", args: '{"path": "<todo-path>", "frontmatter": {"stage": "review"}}' })
+   \`\`\`bash
+   obsidian vault="<vault-name>" property:set file="<todo-name>" name="stage" value="review"
+   \`\`\`
 5. Never set stage to "done" — that requires human approval.
 
 ### Stage Lifecycle: backlog → in-progress → review → done
 
 ### Rules
 - ALWAYS search vault before creating new todos (avoid duplicates)
-- ALWAYS use MCP vault tools — never modify vault files directly via write/edit
+- ALWAYS use Obsidian CLI (via bash) — never modify vault files directly via write/edit
 - ALWAYS update stage transitions — don't skip stages
 - Keep todo scope focused — one todo per deliverable
-- Use vault_search_notes and vault_update_frontmatter MCP tools
+- Use Obsidian CLI: search, eval, property:set, create, read commands
 - Project todos live in: projects/{project-name}/`;
 
 const DEFAULT_NO_VAULT_HINT = `## Vault Not Configured
 
 No vault is currently configured. The user can run \`/vault-setup\` to create
 a vault configuration. Until then, vault-related features are inactive.`;
+
+// ---------------------------------------------------------------------------
+// Enhanced compaction prompt — knowledge extraction sections
+// ---------------------------------------------------------------------------
+
+const SUMMARY_PROMPT = `You are a session summarizer. Create a structured summary of this conversation that captures everything needed to continue the work.
+
+Use this exact format (omit empty sections):
+
+## Goal
+What the user is trying to accomplish.
+
+## Progress
+### Done
+- [x] Completed tasks
+
+### In Progress
+- [ ] Current work
+
+### Blocked
+- Issues, if any
+
+## Key Decisions
+- **Decision**: Rationale for the choice
+
+## Lessons Learned
+- **Lesson**: What was learned, when it applies (debugging insights, gotchas, best practices)
+
+## Ideas & Proposals
+- **Idea**: Speculative suggestions or future improvements discussed
+
+## Action Items
+- **TODO**: Deferred work or action items identified but not yet done
+
+## Patterns Observed
+- **Pattern**: Recurring approaches, repeated solutions, cross-project similarities
+
+## Next Steps
+1. What should happen next
+
+## Critical Context
+- Data, paths, configurations needed to continue
+
+Be thorough but concise. Include ALL information needed to continue effectively.
+Only include sections that have actual content — do not fabricate items.`;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -195,7 +245,52 @@ function expandHome(p: string): string {
 async function loadConfig(): Promise<VaultConfig | null> {
   try {
     const raw = await readFile(CONFIG_PATH, "utf-8");
-    return JSON.parse(raw) as VaultConfig;
+    const config = JSON.parse(raw) as VaultConfig;
+
+    // Resolve vault_name: explicit config → basename of vault_path
+    if (config.vault_name) {
+      vaultName = config.vault_name;
+    } else if (config.vault_path) {
+      vaultName = basename(expandHome(config.vault_path));
+    }
+
+    // Resolve cli_path: explicit config → platform default
+    if (config.cli_path) {
+      cliPath = config.cli_path;
+    }
+
+    return config;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Execute an Obsidian CLI command against the configured vault.
+ * Returns the trimmed stdout. For `eval` commands, strips the leading `=> ` prefix.
+ * Throws on timeout (10s) or non-zero exit.
+ */
+function execCli(args: string): string {
+  const cmd = `"${cliPath}" vault="${vaultName}" ${args}`;
+  try {
+    const result = execSync(cmd, { timeout: 10_000, encoding: "utf-8" }).trim();
+    // `eval` results are prefixed with "=> "
+    if (result.startsWith("=> ")) {
+      return result.slice(3);
+    }
+    return result;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`CLI command failed: ${message}`);
+  }
+}
+
+/**
+ * Safely execute a CLI command, returning null on failure instead of throwing.
+ */
+function execCliSafe(args: string): string | null {
+  try {
+    return execCli(args);
   } catch {
     return null;
   }
@@ -203,17 +298,102 @@ async function loadConfig(): Promise<VaultConfig | null> {
 
 function stageEmoji(stage: string): string {
   switch (stage) {
-    case "in-progress":
-      return "🔨";
-    case "review":
-      return "👀";
-    case "done":
-      return "✅";
-    case "backlog":
-      return "📋";
-    default:
-      return "📋";
+    case "in-progress": return "🔨";
+    case "review": return "👀";
+    case "done": return "✅";
+    case "backlog": return "📋";
+    default: return "📋";
   }
+}
+
+// ---------------------------------------------------------------------------
+// Session context — queried from CLI on session_start
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a vault context block by querying the Obsidian CLI.
+ * Returns a formatted string for system prompt injection, or empty string on failure.
+ */
+function buildVaultContext(): string {
+  const sections: string[] = [];
+
+  try {
+    // 1. Active todos (in-progress)
+    const activeTodosRaw = execCliSafe(
+      `eval code="JSON.stringify(app.vault.getMarkdownFiles().filter(f=>{const fm=app.metadataCache.getFileCache(f)?.frontmatter;return fm?.type==='todo'&&fm?.stage==='in-progress'}).map(f=>{const fm=app.metadataCache.getFileCache(f).frontmatter;return{name:f.basename,priority:fm.priority||'medium',project:fm.project||'unknown'}}))"`,
+    );
+    if (activeTodosRaw) {
+      const activeTodos = JSON.parse(activeTodosRaw) as Array<{ name: string; priority: string; project: string }>;
+      if (activeTodos.length > 0) {
+        sections.push("🔨 Active Todos (in-progress):");
+        for (const t of activeTodos) {
+          sections.push(`  - ${t.name} (project: ${t.project}, priority: ${t.priority})`);
+        }
+      }
+    }
+
+    // 2. Backlog todos (top 5 by priority)
+    const backlogRaw = execCliSafe(
+      `eval code="JSON.stringify(app.vault.getMarkdownFiles().filter(f=>{const fm=app.metadataCache.getFileCache(f)?.frontmatter;return fm?.type==='todo'&&fm?.stage==='backlog'}).map(f=>{const fm=app.metadataCache.getFileCache(f).frontmatter;return{name:f.basename,priority:fm.priority||'medium',project:fm.project||'unknown'}}).sort((a,b)=>{const o={high:0,medium:1,low:2};return(o[a.priority]??1)-(o[b.priority]??1)}).slice(0,5))"`,
+    );
+    if (backlogRaw) {
+      const backlog = JSON.parse(backlogRaw) as Array<{ name: string; priority: string; project: string }>;
+      if (backlog.length > 0) {
+        sections.push("\n📋 Backlog (top 5 by priority):");
+        for (const t of backlog) {
+          sections.push(`  - ${t.name} (priority: ${t.priority})`);
+        }
+      }
+    }
+
+    // 3. Todos in review
+    const reviewRaw = execCliSafe(
+      `eval code="JSON.stringify(app.vault.getMarkdownFiles().filter(f=>{const fm=app.metadataCache.getFileCache(f)?.frontmatter;return fm?.type==='todo'&&fm?.stage==='review'}).map(f=>({name:f.basename,project:app.metadataCache.getFileCache(f).frontmatter.project||'unknown'})))"`,
+    );
+    if (reviewRaw) {
+      const review = JSON.parse(reviewRaw) as Array<{ name: string; project: string }>;
+      if (review.length > 0) {
+        sections.push("\n👀 Awaiting Review:");
+        for (const t of review) {
+          sections.push(`  - ${t.name} (${t.project})`);
+        }
+      }
+    }
+
+    // 4. Recent decisions (last 7 days)
+    const decisionsRaw = execCliSafe(
+      `eval code="JSON.stringify(app.vault.getMarkdownFiles().filter(f=>{const fm=app.metadataCache.getFileCache(f)?.frontmatter;if(!fm||fm.type!=='decision')return false;const created=new Date(fm.created);return(Date.now()-created)<7*86400000}).map(f=>{const fm=app.metadataCache.getFileCache(f).frontmatter;return{name:f.basename,created:fm.created}}))"`,
+    );
+    if (decisionsRaw) {
+      const decisions = JSON.parse(decisionsRaw) as Array<{ name: string; created: string }>;
+      if (decisions.length > 0) {
+        sections.push("\n🧠 Recent Decisions (last 7 days):");
+        for (const d of decisions) {
+          sections.push(`  - ${d.name} (${d.created})`);
+        }
+      }
+    }
+
+    // 5. Vault health
+    const orphans = execCliSafe("orphans total");
+    const unresolved = execCliSafe("unresolved total");
+    const openTasks = execCliSafe("tasks todo total");
+
+    if (orphans !== null || unresolved !== null || openTasks !== null) {
+      sections.push("\n🔗 Vault Health:");
+      const parts: string[] = [];
+      if (orphans !== null) parts.push(`Orphans: ${orphans}`);
+      if (unresolved !== null) parts.push(`Unresolved links: ${unresolved}`);
+      if (openTasks !== null) parts.push(`Open tasks: ${openTasks}`);
+      sections.push(`  ${parts.join(" | ")}`);
+    }
+  } catch {
+    // Context building failed — non-fatal, return what we have
+  }
+
+  if (sections.length === 0) return "";
+
+  return `\n## 📊 Vault Context (auto-loaded)\n\n${sections.join("\n")}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -226,14 +406,14 @@ export default function vaultGuard(pi: ExtensionAPI) {
   let vaultPath: string | null = null;
   let activeTodoPath: string | null = null;
   let activeStage: string | null = null;
+  let vaultContext: string = "";
+  let captureCount = 0;
 
   // -------------------------------------------------------------------------
-  // Detect vault state
+  // Detect vault state — probes Obsidian CLI
   // -------------------------------------------------------------------------
 
-  async function detectState(ctx: {
-    ui: { setStatus(id: string, text: string): void; notify(msg: string, level: string): void };
-  }): Promise<VaultState> {
+  async function detectState(): Promise<VaultState> {
     // 1. Read config
     const config = await loadConfig();
     if (!config?.vault_path) {
@@ -248,34 +428,57 @@ export default function vaultGuard(pi: ExtensionAPI) {
       return "no-vault";
     }
 
-    // 3. Probe MCP connection — attempt vault_list_directory on root
-    //    We can't directly call MCP from an extension, but we can check
-    //    that the vault path exists on disk. The actual MCP connection
-    //    will be validated on first tool_call. Start optimistic if path exists.
-    //    Downgrade to vault-exists if first MCP call fails.
-    return "connected";
+    // 3. Probe Obsidian CLI — try to get vault info
+    if (!vaultName) return "vault-exists";
+
+    const probe = execCliSafe("vault info=name");
+    if (probe !== null) {
+      return "connected";
+    }
+
+    return "vault-exists";
   }
 
   // -------------------------------------------------------------------------
-  // Hook: session_start — detect state, set initial footer
+  // Hook: session_start — detect state, query context, set initial footer
   // -------------------------------------------------------------------------
 
   pi.on("session_start", async (_event, ctx) => {
     // Reset session tracking
     activeTodoPath = null;
     activeStage = null;
+    vaultContext = "";
+    captureCount = 0;
+
+    // Restore capture count from session history
+    for (const entry of ctx.sessionManager.getEntries()) {
+      if (
+        entry.type === "custom" &&
+        (entry as any).customType === "vault-capture"
+      ) {
+        captureCount++;
+      }
+    }
+    if (captureCount > 0) {
+      ctx.ui.setStatus(
+        "vault-capture",
+        `📌 ${captureCount} capture${captureCount === 1 ? "" : "s"}`,
+      );
+    }
 
     // Load externalized persona/rules from data/vault-knowledge.md
     await loadVaultKnowledge();
 
-    state = await detectState(ctx);
+    state = await detectState();
 
     ctx.ui.setStatus(STATUS_ID, FOOTER[state]);
 
     if (state === "connected") {
       ctx.ui.notify("🔮 Vault connected — Sage is active", "info");
+      // Query vault context for system prompt injection
+      vaultContext = buildVaultContext();
     } else if (state === "vault-exists") {
-      ctx.ui.notify("🔮 Vault found but MCP offline — rules still active", "info");
+      ctx.ui.notify("🔮 Vault found but Obsidian offline — rules still active", "info");
     }
   });
 
@@ -287,9 +490,15 @@ export default function vaultGuard(pi: ExtensionAPI) {
     let injection = "";
 
     switch (state) {
-      case "connected":
-        injection = knowledgeSections.SAGE_PERSONA + "\n" + knowledgeSections.VAULT_TODO_RULES;
+      case "connected": {
+        // Replace <vault-name> placeholder in loaded rules with actual vault name
+        const rules = knowledgeSections.VAULT_TODO_RULES.replaceAll("<vault-name>", vaultName ?? "<vault>");
+        injection = knowledgeSections.SAGE_PERSONA + "\n" + rules;
+        if (vaultContext) {
+          injection += "\n" + vaultContext;
+        }
         break;
+      }
 
       case "vault-exists":
         injection = knowledgeSections.VAULT_TODO_RULES;
@@ -306,47 +515,36 @@ export default function vaultGuard(pi: ExtensionAPI) {
   });
 
   // -------------------------------------------------------------------------
-  // Hook: tool_call — track vault MCP calls, update footer
+  // Hook: tool_call — track vault CLI calls via bash, update footer
   // -------------------------------------------------------------------------
 
   pi.on("tool_call", async (event, ctx) => {
-    if (event.toolName !== "mcp") return undefined;
+    if (event.toolName !== "bash") return undefined;
 
-    const input = event.input as {
-      tool?: string;
-      args?: string;
-      server?: string;
-    };
+    const input = event.input as { command?: string };
+    const cmd = input.command ?? "";
 
-    // Track vault_update_frontmatter for stage transitions
-    if (input.tool === "vault_update_frontmatter" && input.args) {
-      try {
-        const args = JSON.parse(input.args);
-        const path = args.path as string;
-        const stage = args.frontmatter?.stage as string;
+    // Only track commands that look like Obsidian CLI calls
+    if (!cmd.includes("obsidian") && !cmd.includes("Obsidian")) return undefined;
 
-        if (path && stage) {
-          activeTodoPath = path;
-          activeStage = stage;
+    // Track property:set with name="stage" — stage transition
+    const stageMatch = cmd.match(/property:set\s.*?name="stage"\s.*?value="([^"]+)"/);
+    const fileMatch = cmd.match(/file="([^"]+)"/);
 
-          const emoji = stageEmoji(stage);
-          const shortName =
-            path.split("/").pop()?.replace(".md", "") ?? path;
-          ctx.ui.setStatus(STATUS_ID, `${emoji} ${shortName} → ${stage}`);
-        }
-      } catch {
-        // args parsing failed — ignore
-      }
+    if (stageMatch && fileMatch) {
+      const stage = stageMatch[1];
+      const file = fileMatch[1];
+      activeTodoPath = file;
+      activeStage = stage;
+
+      const emoji = stageEmoji(stage);
+      const shortName = file.replace(/\.md$/, "").split("/").pop() ?? file;
+      ctx.ui.setStatus(STATUS_ID, `${emoji} ${shortName} → ${stage}`);
     }
 
-    // Track vault_search_notes — show searching indicator
-    if (input.tool === "vault_search_notes") {
+    // Track search or eval — show searching indicator
+    if (cmd.includes("search query=") || cmd.includes("eval code=")) {
       ctx.ui.setStatus(STATUS_ID, "🔍 Searching vault...");
-    }
-
-    // If we see any vault MCP call succeed, we know we're connected
-    if (input.tool?.startsWith("vault_") && state === "vault-exists") {
-      state = "connected";
     }
 
     return undefined; // never block
@@ -357,29 +555,30 @@ export default function vaultGuard(pi: ExtensionAPI) {
   // -------------------------------------------------------------------------
 
   pi.on("tool_result", async (event, ctx) => {
-    if (event.toolName !== "mcp") return undefined;
+    if (event.toolName !== "bash") return undefined;
 
-    // Check for MCP errors that indicate offline vault
+    // Check for CLI errors that indicate Obsidian is offline
     if (state === "connected") {
       const result = event.result;
       if (
         typeof result === "string" &&
         (result.includes("ECONNREFUSED") ||
-          result.includes("MCP server not found") ||
-          result.includes("could not connect"))
+          result.includes("connect ENOENT") ||
+          result.includes("ETIMEDOUT") ||
+          result.includes("Command failed"))
       ) {
         state = "vault-exists";
         ctx.ui.setStatus(STATUS_ID, FOOTER["vault-exists"]);
-        ctx.ui.notify("🔮 Vault MCP connection lost — degraded to offline mode", "warning");
+        ctx.ui.notify("🔮 Obsidian CLI connection lost — degraded to offline mode", "warning");
         return undefined;
       }
     }
 
-    // Restore active todo footer, or default connected footer
+    // Restore active todo footer, or default footer
     if (activeTodoPath && activeStage) {
       const emoji = stageEmoji(activeStage);
       const shortName =
-        activeTodoPath.split("/").pop()?.replace(".md", "") ?? activeTodoPath;
+        activeTodoPath.replace(/\.md$/, "").split("/").pop() ?? activeTodoPath;
       ctx.ui.setStatus(STATUS_ID, `${emoji} ${shortName} → ${activeStage}`);
     } else {
       ctx.ui.setStatus(STATUS_ID, FOOTER[state]);
@@ -387,6 +586,102 @@ export default function vaultGuard(pi: ExtensionAPI) {
 
     return undefined; // never modify results
   });
+
+  // -------------------------------------------------------------------------
+  // Hook: session_before_compact — enhanced compaction with knowledge sections
+  // -------------------------------------------------------------------------
+
+  pi.on("session_before_compact", async (event, ctx) => {
+    // Only enhance compaction when vault is connected
+    if (state !== "connected") return undefined;
+
+    const { preparation, signal } = event;
+    const {
+      messagesToSummarize,
+      turnPrefixMessages,
+      tokensBefore,
+      firstKeptEntryId,
+      previousSummary,
+    } = preparation;
+
+    // Use the current conversation model
+    const model = ctx.model;
+    if (!model) return undefined; // fall back to default
+
+    const apiKey = await ctx.modelRegistry.getApiKey(model);
+    if (!apiKey) return undefined; // fall back to default
+
+    // Combine all messages
+    const allMessages = [...messagesToSummarize, ...turnPrefixMessages];
+    if (allMessages.length === 0) return undefined;
+
+    const conversationText = serializeConversation(
+      convertToLlm(allMessages),
+    );
+
+    // Include previous summary for continuity
+    const previousContext = previousSummary
+      ? `\n\nPrevious session summary for additional context:\n${previousSummary}`
+      : "";
+
+    const messages = [
+      {
+        role: "user" as const,
+        content: [
+          {
+            type: "text" as const,
+            text: `${SUMMARY_PROMPT}${previousContext}
+
+${event.customInstructions ? `Additional focus: ${event.customInstructions}\n` : ""}
+<conversation>
+${conversationText}
+</conversation>`,
+          },
+        ],
+        timestamp: Date.now(),
+      },
+    ];
+
+    try {
+      const response = await complete(
+        model,
+        { messages },
+        { apiKey, maxTokens: 8192, signal },
+      );
+
+      const summary = response.content
+        .filter((c): c is { type: "text"; text: string } => c.type === "text")
+        .map((c) => c.text)
+        .join("\n");
+
+      if (!summary.trim()) {
+        if (!signal.aborted) {
+          ctx.ui.notify("Enhanced summary was empty, using default", "warning");
+        }
+        return undefined;
+      }
+
+      return {
+        compaction: {
+          summary,
+          firstKeptEntryId,
+          tokensBefore,
+        },
+      };
+    } catch (error) {
+      if (!signal.aborted) {
+        const msg = error instanceof Error ? error.message : String(error);
+        ctx.ui.notify(`Enhanced compaction failed: ${msg}`, "warning");
+      }
+      return undefined; // fall back to default
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Hook: session_shutdown — reserved for future enrichment
+  // -------------------------------------------------------------------------
+  // Daily note logging removed — too noisy without meaningful context.
+  // Future: summarize session accomplishments on shutdown, write vault entries.
 
   // -------------------------------------------------------------------------
   // Command: /vault-todo — show current todo tracking status
@@ -407,6 +702,71 @@ export default function vaultGuard(pi: ExtensionAPI) {
   });
 
   // -------------------------------------------------------------------------
+  // Command: /vault-capture — mark knowledge during sessions
+  // -------------------------------------------------------------------------
+
+  pi.registerCommand("vault-capture", {
+    description: 'Capture knowledge for vault: /vault-capture "text"',
+    handler: async (args, ctx) => {
+      // Strip surrounding quotes if present
+      let text = args.trim();
+      if (
+        (text.startsWith('"') && text.endsWith('"')) ||
+        (text.startsWith("'") && text.endsWith("'"))
+      ) {
+        text = text.slice(1, -1);
+      }
+
+      if (!text) {
+        ctx.ui.notify(
+          'Usage: /vault-capture "your knowledge here"',
+          "warning",
+        );
+        return;
+      }
+
+      // Persist as a custom session entry (survives in JSONL)
+      pi.appendEntry("vault-capture", {
+        text,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Inject a message so the LLM is aware (and it shows in context)
+      pi.sendMessage(
+        {
+          customType: "vault-capture",
+          content: `📌 Captured for vault: "${text}"`,
+          display: true,
+          details: { text, timestamp: new Date().toISOString() },
+        },
+        { deliverAs: "nextTurn" },
+      );
+
+      captureCount++;
+      ctx.ui.setStatus(
+        "vault-capture",
+        `📌 ${captureCount} capture${captureCount === 1 ? "" : "s"}`,
+      );
+      ctx.ui.notify(
+        `📌 Captured: "${text.slice(0, 60)}${text.length > 60 ? "..." : ""}"`,
+        "success",
+      );
+    },
+  });
+
+  // -------------------------------------------------------------------------
+  // Message Renderer: vault-capture — themed capture display
+  // -------------------------------------------------------------------------
+
+  pi.registerMessageRenderer("vault-capture", (message, _options, theme) => {
+    const text =
+      theme.fg("accent", "📌 ") +
+      theme.fg("success", "Vault Capture: ") +
+      theme.italic(message.content as string);
+    return new Text(text, 0, 0);
+  });
+
+  // -------------------------------------------------------------------------
   // Command: /vault-setup — guide user through vault configuration
   // -------------------------------------------------------------------------
 
@@ -416,7 +776,7 @@ export default function vaultGuard(pi: ExtensionAPI) {
       // Check current state
       if (state === "connected") {
         ctx.ui.notify(
-          `🔮 Vault already connected at: ${vaultPath ?? "unknown"}`,
+          `🔮 Vault already connected at: ${vaultPath ?? "unknown"} (vault: ${vaultName ?? "unknown"})`,
           "info",
         );
         return;
@@ -448,9 +808,16 @@ export default function vaultGuard(pi: ExtensionAPI) {
           return;
         }
 
-        // Write config
+        // Derive vault name from path basename
+        const derivedName = basename(resolvedVaultPath);
+
+        // Write config with vault_name and cli_path
         const configContent = JSON.stringify(
-          { vault_path: pathArg },
+          {
+            vault_path: pathArg,
+            vault_name: derivedName,
+            cli_path: DEFAULT_CLI_PATH,
+          },
           null,
           2,
         );
@@ -462,11 +829,16 @@ export default function vaultGuard(pi: ExtensionAPI) {
           await writeFile(CONFIG_PATH, configContent, "utf-8");
 
           vaultPath = resolvedVaultPath;
-          state = "connected";
+          vaultName = derivedName;
+
+          // Probe CLI to set state
+          const probe = execCliSafe("vault info=name");
+          state = probe !== null ? "connected" : "vault-exists";
+
           ctx.ui.setStatus(STATUS_ID, FOOTER[state]);
           ctx.ui.notify(
-            `🔮 Vault configured!\n  Path: ${resolvedVaultPath}\n  Config: ${CONFIG_PATH}\n\nSage is now active. The Crystal remembers.`,
-            "success",
+            `🔮 Vault configured!\n  Path: ${resolvedVaultPath}\n  Name: ${derivedName}\n  CLI: ${cliPath}\n  Config: ${CONFIG_PATH}\n\n${state === "connected" ? "Sage is now active. The Crystal remembers." : "Obsidian is not running — start it for full connectivity."}`,
+            state === "connected" ? "success" : "warning",
           );
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -484,14 +856,14 @@ export default function vaultGuard(pi: ExtensionAPI) {
 
 ## What you need
 
-1. **A vault directory** — an Obsidian vault or any folder of Markdown files.
+1. **A vault directory** — an Obsidian vault (folder of Markdown files).
    If you don't have one yet, create it:
    \`\`\`
    mkdir -p ~/vault
    \`\`\`
 
-2. **MCP-Vault server** running and configured in pi's MCP settings.
-   See: https://github.com/bitbonsai/mcpvault
+2. **Obsidian** installed and running. The CLI is built into Obsidian (v1.12.4+).
+   Default binary: \`${DEFAULT_CLI_PATH}\`
 
 ## Quick setup
 
@@ -501,7 +873,7 @@ Run this command with the path to your vault:
 /vault-setup ~/path/to/your/vault
 \`\`\`
 
-This will create \`~/.pi/agent/vault-config.json\` with your vault path.
+This will create \`~/.pi/agent/vault-config.json\` with your vault path, name, and CLI path.
 
 ## Manual setup
 
@@ -510,9 +882,17 @@ Create the file yourself:
 \`\`\`json
 // ~/.pi/agent/vault-config.json
 {
-  "vault_path": "~/vault"
+  "vault_path": "~/vault",
+  "vault_name": "vault",
+  "cli_path": "${DEFAULT_CLI_PATH}"
 }
 \`\`\`
+
+## Config fields
+
+- **vault_path** — Path to your Obsidian vault directory
+- **vault_name** — Obsidian vault name (defaults to folder basename)
+- **cli_path** — Path to Obsidian binary (defaults to macOS location)
 
 ## Current state
 
@@ -520,6 +900,7 @@ Create the file yourself:
 - **pi agent dir:** ${piAgentExists ? "✅ exists" : "❌ not found"} (\`${piAgentDir}\`)
 - **Vault state:** ${state}
 ${vaultPath ? `- **Vault path:** ${vaultPath}` : ""}
+${vaultName ? `- **Vault name:** ${vaultName}` : ""}
 `,
           display: true,
           details: { state, configPath: CONFIG_PATH },
@@ -530,7 +911,7 @@ ${vaultPath ? `- **Vault path:** ${vaultPath}` : ""}
   });
 
   // -------------------------------------------------------------------------
-  // Message Renderer: vault-setup — beautifully render setup guide in TUI
+  // Message Renderer: vault-setup — render setup guide in TUI
   // -------------------------------------------------------------------------
 
   pi.registerMessageRenderer("vault-setup", (message, _options, theme) => {
@@ -545,7 +926,6 @@ ${vaultPath ? `- **Vault path:** ${vaultPath}` : ""}
     let codeBlockLang = "";
 
     for (const line of lines) {
-      // Toggle code block state
       if (line.trimStart().startsWith("```")) {
         if (!inCodeBlock) {
           inCodeBlock = true;
@@ -562,13 +942,11 @@ ${vaultPath ? `- **Vault path:** ${vaultPath}` : ""}
         continue;
       }
 
-      // Inside code block — dim with gutter
       if (inCodeBlock) {
         rendered.push(theme.dim("  │ ") + theme.fg("accent", line));
         continue;
       }
 
-      // H1 heading — main title with crystal emoji
       if (line.startsWith("# ")) {
         const title = line.slice(2).trim();
         rendered.push("");
@@ -578,7 +956,6 @@ ${vaultPath ? `- **Vault path:** ${vaultPath}` : ""}
         continue;
       }
 
-      // H2 heading — section headers
       if (line.startsWith("## ")) {
         const heading = line.slice(3).trim();
         rendered.push("");
@@ -587,7 +964,6 @@ ${vaultPath ? `- **Vault path:** ${vaultPath}` : ""}
         continue;
       }
 
-      // Numbered list items — with bold text between **
       if (/^\d+\.\s/.test(line.trim())) {
         const styledLine = line.replace(
           /\*\*(.+?)\*\*/g,
@@ -597,33 +973,27 @@ ${vaultPath ? `- **Vault path:** ${vaultPath}` : ""}
         continue;
       }
 
-      // Bullet list items with bold labels and status indicators
       if (line.trimStart().startsWith("- ")) {
         let styledLine = line;
-        // Bold text
         styledLine = styledLine.replace(
           /\*\*(.+?)\*\*/g,
           (_m, inner) => theme.bold(theme.fg("accent", inner)),
         );
-        // Inline code
         styledLine = styledLine.replace(
           /`([^`]+)`/g,
           (_m, inner) => theme.dim(inner),
         );
-        // Status indicators
         styledLine = styledLine.replace("✅", theme.fg("success", "✅"));
         styledLine = styledLine.replace("❌", theme.fg("error", "❌"));
         rendered.push("  " + styledLine);
         continue;
       }
 
-      // Inline code in regular text
       if (line.includes("`")) {
         let styledLine = line.replace(
           /`([^`]+)`/g,
           (_m, inner) => theme.fg("accent", inner),
         );
-        // Bold text
         styledLine = styledLine.replace(
           /\*\*(.+?)\*\*/g,
           (_m, inner) => theme.bold(inner),
@@ -632,17 +1002,14 @@ ${vaultPath ? `- **Vault path:** ${vaultPath}` : ""}
         continue;
       }
 
-      // Empty lines — preserve spacing
       if (line.trim() === "") {
         rendered.push("");
         continue;
       }
 
-      // Default — regular text indented
       rendered.push("  " + line);
     }
 
-    // Add a subtle state badge at the bottom if details available
     if (details?.state) {
       rendered.push("");
       const stateColors: Record<string, string> = {

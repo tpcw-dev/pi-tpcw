@@ -8,6 +8,8 @@ vault/
 │   └── {project-name}/
 │       ├── _project-index.md       # Agent-readable project summary
 │       ├── {entry-slug}.md         # Individual knowledge entries
+│       ├── diagrams/               # Project-specific Excalidraw diagrams
+│       │   └── {name}.excalidraw.md
 │       └── ...
 ├── _global/                         # Cross-project knowledge
 │   ├── lessons/
@@ -15,7 +17,9 @@ vault/
 │   └── patterns/
 ├── _system/                         # Vault metadata
 │   ├── _master-index.md
-│   └── vault-rules.md
+│   ├── vault-rules.md
+│   └── diagrams/                    # System-wide Excalidraw diagrams
+│       └── {name}.excalidraw.md
 └── _proposals/                      # Review queue for high-stakes items
     └── _archived/                   # Rejected proposals (preserved)
 ```
@@ -120,6 +124,36 @@ total-entries: N
 - **Lessons:** N entries
 - **Patterns:** N entries
 ```
+
+## Diagrams
+
+Excalidraw diagrams live in the vault as `.excalidraw.md` files, viewable via the Obsidian Excalidraw plugin.
+
+### Diagram Locations
+
+| Scope | Path |
+|-------|------|
+| System-wide (cross-project) | `_system/diagrams/{name}.excalidraw.md` |
+| Project-specific | `projects/{project}/diagrams/{name}.excalidraw.md` |
+
+### Naming
+
+Format: `{short-descriptive-slug}.excalidraw.md`
+
+- Use kebab-case
+- Keep concise but descriptive (2-5 words)
+- Examples: `vault-workflow-overview.excalidraw.md`, `todo-lifecycle.excalidraw.md`
+
+### File Format
+
+`.excalidraw.md` files use the Obsidian Excalidraw plugin format:
+- YAML frontmatter with `excalidraw-plugin: parsed`
+- Excalidraw JSON wrapped in `%%` comment delimiters
+- Written via filesystem tools (NOT MCP-Vault `vault_write_note`)
+
+### Creation
+
+Use the `vault-diagram` skill to create/update diagrams. Reference data in `skills/vault-diagram/data/excalidraw-reference.md`.
 
 ## Idempotency Rules
 

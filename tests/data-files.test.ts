@@ -103,7 +103,7 @@ describe("vault-knowledge.md", () => {
 
     it("VAULT_TODO_RULES contains todo protocol content", () => {
       expect(sections.VAULT_TODO_RULES).toContain("Stage Lifecycle");
-      expect(sections.VAULT_TODO_RULES).toContain("vault_update_frontmatter");
+      expect(sections.VAULT_TODO_RULES).toContain("property:set");
       expect(sections.VAULT_TODO_RULES.length).toBeGreaterThan(100);
     });
 

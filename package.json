@@ -7,7 +7,10 @@
   },
   "pi": {
     "extensions": [
-      "extensions/vault-guard"
+      "extensions/vault-guard",
+      "extensions/loop",
+      "extensions/skills-browser",
+      "extensions/plan-mode"
     ],
     "skills": [
       "skills/vault-init",
@@ -16,7 +19,8 @@
       "skills/vault-review",
       "skills/vault-status",
       "skills/vault-todo",
-      "skills/vault-update"
+      "skills/vault-update",
+      "skills/vault-diagram"
     ]
   },
   "peerDependencies": {

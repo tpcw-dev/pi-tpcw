@@ -34,24 +34,34 @@ You MUST follow this protocol for every task:
 
 ### Before Starting Work
 1. Search vault for existing todos related to your task:
-   mcp({ tool: "vault_search_notes", args: '{"query": "<task topic>", "searchFrontmatter": true, "limit": 10}' })
-2. If a matching todo exists, update its stage to "in-progress":
-   mcp({ tool: "vault_update_frontmatter", args: '{"path": "<todo-path>", "frontmatter": {"stage": "in-progress"}}' })
-3. Only create a new todo if no existing one covers the same scope.
+   ```bash
+   obsidian vault="<vault-name>" search query="<task topic>" format=json
+   ```
+2. For frontmatter-specific queries (e.g., find todos by stage):
+   ```bash
+   obsidian vault="<vault-name>" eval code="JSON.stringify(app.vault.getMarkdownFiles().filter(f=>{const fm=app.metadataCache.getFileCache(f)?.frontmatter;return fm?.type==='todo'&&fm?.stage==='in-progress'}).map(f=>({path:f.path,name:f.basename,stage:app.metadataCache.getFileCache(f).frontmatter.stage})))"
+   ```
+3. If a matching todo exists, update its stage to "in-progress":
+   ```bash
+   obsidian vault="<vault-name>" property:set file="<todo-name>" name="stage" value="in-progress"
+   ```
+4. Only create a new todo if no existing one covers the same scope.
 
 ### After Completing Work
-4. Update the todo stage to "review":
-   mcp({ tool: "vault_update_frontmatter", args: '{"path": "<todo-path>", "frontmatter": {"stage": "review"}}' })
-5. Never set stage to "done" — that requires human approval.
+5. Update the todo stage to "review":
+   ```bash
+   obsidian vault="<vault-name>" property:set file="<todo-name>" name="stage" value="review"
+   ```
+6. Never set stage to "done" — that requires human approval.
 
 ### Stage Lifecycle: backlog → in-progress → review → done
 
 ### Rules
 - ALWAYS search vault before creating new todos (avoid duplicates)
-- ALWAYS use MCP vault tools — never modify vault files directly via write/edit
+- ALWAYS use Obsidian CLI (via bash) — never modify vault files directly via write/edit
 - ALWAYS update stage transitions — don't skip stages
 - Keep todo scope focused — one todo per deliverable
-- Use vault_search_notes and vault_update_frontmatter MCP tools
+- Use Obsidian CLI: search, eval, property:set, create, read commands
 - Project todos live in: projects/{project-name}/
 
 <!-- SECTION: NO_VAULT_HINT -->

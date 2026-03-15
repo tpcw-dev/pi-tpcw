@@ -8,25 +8,60 @@ description: Vault todo lifecycle management. Use when starting work on a task, 
 ## Before Starting Any Work
 
 1. **Search for existing todos:**
-   ```
-   mcp({ tool: "vault_search_notes", args: '{"query": "<your task topic>", "searchFrontmatter": true, "limit": 10}' })
-   ```
-
-2. **If a matching todo exists**, update its stage:
-   ```
-   mcp({ tool: "vault_update_frontmatter", args: '{"path": "<todo-path>", "frontmatter": {"stage": "in-progress"}}' })
+   ```bash
+   obsidian vault="<vault>" search query="<your task topic>" format=json
    ```
 
-3. **If NO matching todo exists** and the task is significant, create one:
+2. **Search by frontmatter** (e.g., find all in-progress todos):
+   ```bash
+   obsidian vault="<vault>" eval code="JSON.stringify(app.vault.getMarkdownFiles().filter(f=>{const fm=app.metadataCache.getFileCache(f)?.frontmatter;return fm?.type==='todo'&&fm?.stage==='in-progress'}).map(f=>({path:f.path,name:f.basename,priority:app.metadataCache.getFileCache(f).frontmatter.priority})))"
    ```
-   mcp({ tool: "vault_write_note", args: '{"path": "projects/<project>/short-slug.md", "content": "---\nid: todo-<project>-<slug>-<date>\ntype: todo\nproject: <project>\nstatus: active\ncreated: <YYYY-MM-DD>\nconfidence: high\ntags: []\nrelated: []\nsource-session: pi-session-<date>\npriority: medium\nassignee: \"\"\ndue: \"\"\nstage: in-progress\neffort: medium\n---\n\n# Title\n\nDescription of what needs to be done.\n\n## Scope\n\n- [ ] Task 1\n- [ ] Task 2\n"}' })
+
+3. **If a matching todo exists**, update its stage:
+   ```bash
+   obsidian vault="<vault>" property:set file="<todo-name>" name="stage" value="in-progress"
+   ```
+
+4. **If NO matching todo exists** and the task is significant, create one:
+   ```bash
+   obsidian vault="<vault>" create path="projects/<project>/short-slug.md" content="---
+   id: todo-<project>-<slug>-<date>
+   type: todo
+   project: <project>
+   status: active
+   created: <YYYY-MM-DD>
+   confidence: high
+   tags: []
+   related: []
+   source-session: pi-session-<date>
+   priority: medium
+   assignee: \"\"
+   due: \"\"
+   stage: in-progress
+   effort: medium
+   ---
+
+   # Title
+
+   Description of what needs to be done.
+
+   ## Scope
+
+   - [ ] Task 1
+   - [ ] Task 2
+   "
+   ```
+
+5. **Read a todo:**
+   ```bash
+   obsidian vault="<vault>" read file="<todo-name>"
    ```
 
 ## After Finishing Work
 
 Update the todo stage to `review`:
-```
-mcp({ tool: "vault_update_frontmatter", args: '{"path": "<todo-path>", "frontmatter": {"stage": "review"}}' })
+```bash
+obsidian vault="<vault>" property:set file="<todo-name>" name="stage" value="review"
 ```
 
 **Important:** Never set stage to `done` — that requires human approval.
@@ -45,6 +80,6 @@ backlog → in-progress → review → done
 ## Rules
 
 - ALWAYS search vault before creating new todos (avoid duplicates)
-- ALWAYS use MCP vault tools (never edit vault files directly)
+- ALWAYS use Obsidian CLI via bash (never edit vault files directly)
 - ALWAYS update stage transitions (don't skip stages)
 - Keep todo scope focused — one todo per deliverable
