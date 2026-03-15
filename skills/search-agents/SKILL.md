@@ -1,6 +1,6 @@
 ---
 name: search-agents
-description: Search community agent repositories for agent definitions that can enhance our subagents. Browse, filter, and adapt agents from curated sources. Triggers on "search agents", "find agents", "browse agents", "agent marketplace".
+description: Search community agent repositories for agent definitions that can enhance our subagents. Browse, filter, and adapt agents from curated sources. Auto-clones missing repos on first use. Triggers on "search agents", "find agents", "browse agents", "agent marketplace".
 ---
 
 # Search Agents — Community Agent Browser
@@ -9,13 +9,40 @@ Search community agent repositories for agent definitions. Browse by category, s
 
 ## Sources
 
-Agent repositories are cloned to `~/references/` for local search.
+Repos are cloned to `~/references/` on first use. If a source is missing, clone it.
 
-| Source | Path | Agents | Description |
-|--------|------|--------|-------------|
-| [agency-agents](https://github.com/msitarzewski/agency-agents) | `~/references/agency-agents/` | 193 | Full agency roster — engineering, design, product, marketing, testing, etc. |
+| Source | Repo | Local Path | Agents |
+|--------|------|-----------|--------|
+| agency-agents | `https://github.com/msitarzewski/agency-agents.git` | `~/references/agency-agents/` | 193 |
+| excalidraw-diagram-skill | `https://github.com/coleam00/excalidraw-diagram-skill.git` | `~/references/excalidraw-diagram-skill/` | — |
 
 *More sources will be added in the future.*
+
+## Bootstrap (run on first use or new environment)
+
+Before any search, ensure sources exist. Clone any that are missing:
+
+```bash
+mkdir -p ~/references
+
+# agency-agents
+if [ ! -d ~/references/agency-agents ]; then
+  git clone https://github.com/msitarzewski/agency-agents.git ~/references/agency-agents
+fi
+
+# excalidraw-diagram-skill (used by draw-diagram and diagram-renderer)
+if [ ! -d ~/references/excalidraw-diagram-skill ]; then
+  git clone https://github.com/coleam00/excalidraw-diagram-skill.git ~/references/excalidraw-diagram-skill
+  cd ~/references/excalidraw-diagram-skill/references && uv sync && uv run playwright install chromium
+fi
+```
+
+To update all sources:
+```bash
+for repo in ~/references/*/; do
+  (cd "$repo" && git pull --ff-only 2>/dev/null)
+done
+```
 
 ## Usage
 
@@ -78,15 +105,13 @@ model: {model — claude-sonnet-4-5, claude-haiku-4-5, etc.}
 
 ### 3. Key Adaptation Rules
 
-- **Strip bloat** — agency-agents are verbose by design. Extract the core identity, rules, and workflow. Drop success metrics, emoji headers, memory bank references.
+- **Strip bloat** — agency-agents are verbose. Extract core identity, rules, workflow. Drop success metrics, emoji headers, memory bank references.
 - **Add our context** — reference our file paths, conventions, and tools.
 - **Restrict tools** — only give the agent tools it actually needs.
-- **Pick the right model** — use haiku for fast/cheap tasks, sonnet for quality work.
+- **Pick the right model** — haiku for fast/cheap tasks, sonnet for quality.
 - **Test with subagent** — `subagent({ agent: "{name}", task: "..." })`
 
 ## Useful Agents for Our Stack
-
-Quick reference — agents from agency-agents that are relevant to our diagram/vault workflow:
 
 | Agent | Source File | Useful For |
 |-------|-----------|------------|
@@ -99,7 +124,7 @@ Quick reference — agents from agency-agents that are relevant to our diagram/v
 
 ## Rules
 
-- ALWAYS search locally (repos are cloned to ~/references/)
+- ALWAYS run bootstrap check before searching (clone missing repos)
 - ALWAYS read the full agent file before adapting
 - ALWAYS strip to essential instructions when creating pi agent definitions
 - NEVER copy agent files verbatim — adapt for our context and tools

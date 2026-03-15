@@ -103,8 +103,15 @@ Write the file to `output_path` using the Write tool.
 
 ### Step 7: Render & Validate (if renderer available)
 
-If the render pipeline is available at `~/references/excalidraw-diagram-skill/references/`:
+Bootstrap the render pipeline if missing:
+```bash
+if [ ! -d ~/references/excalidraw-diagram-skill ]; then
+  git clone https://github.com/coleam00/excalidraw-diagram-skill.git ~/references/excalidraw-diagram-skill
+  cd ~/references/excalidraw-diagram-skill/references && uv sync && uv run playwright install chromium
+fi
+```
 
+Then validate:
 1. Extract JSON to a temp `.excalidraw` file
 2. Run: `cd ~/references/excalidraw-diagram-skill/references && uv run python render_excalidraw.py /tmp/{name}.excalidraw`
 3. View the PNG — check for overlaps, clipped text, misaligned arrows
