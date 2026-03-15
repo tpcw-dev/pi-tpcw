@@ -268,12 +268,19 @@ async function loadConfig(): Promise<VaultConfig | null> {
 /**
  * Execute an Obsidian CLI command against the configured vault.
  * Returns the trimmed stdout. For `eval` commands, strips the leading `=> ` prefix.
- * Throws on timeout (10s) or non-zero exit.
+ * Throws on timeout (5s) or non-zero exit.
+ *
+ * Uses killSignal: "SIGKILL" to ensure Electron processes are fully terminated
+ * on timeout, preventing zombie process accumulation.
  */
 function execCli(args: string): string {
   const cmd = `"${cliPath}" vault="${vaultName}" ${args}`;
   try {
-    const result = execSync(cmd, { timeout: 10_000, encoding: "utf-8" }).trim();
+    const result = execSync(cmd, {
+      timeout: 5_000,
+      encoding: "utf-8",
+      killSignal: "SIGKILL",
+    }).trim();
     // `eval` results are prefixed with "=> "
     if (result.startsWith("=> ")) {
       return result.slice(3);
@@ -313,79 +320,114 @@ function stageEmoji(stage: string): string {
 /**
  * Build a vault context block by querying the Obsidian CLI.
  * Returns a formatted string for system prompt injection, or empty string on failure.
+ *
+ * PERF: Uses a single `eval` call to gather all context at once.
+ * Previous approach spawned 7 separate Obsidian processes via execSync,
+ * each launching a full Electron instance. When Obsidian's IPC was slow
+ * these accumulated as zombie processes and crashed the app.
  */
 function buildVaultContext(): string {
   const sections: string[] = [];
 
   try {
-    // 1. Active todos (in-progress)
-    const activeTodosRaw = execCliSafe(
-      `eval code="JSON.stringify(app.vault.getMarkdownFiles().filter(f=>{const fm=app.metadataCache.getFileCache(f)?.frontmatter;return fm?.type==='todo'&&fm?.stage==='in-progress'}).map(f=>{const fm=app.metadataCache.getFileCache(f).frontmatter;return{name:f.basename,priority:fm.priority||'medium',project:fm.project||'unknown'}}))"`,
-    );
-    if (activeTodosRaw) {
-      const activeTodos = JSON.parse(activeTodosRaw) as Array<{ name: string; priority: string; project: string }>;
-      if (activeTodos.length > 0) {
+    // --- Single batched eval: gather all context in one Obsidian process ---
+    const batchCode = `
+(function(){
+  var files = app.vault.getMarkdownFiles();
+  var result = { active:[], backlog:[], review:[], decisions:[], orphans:0, unresolved:0, openTasks:0 };
+
+  files.forEach(function(f){
+    var fm = app.metadataCache.getFileCache(f)?.frontmatter;
+    if(!fm) return;
+
+    if(fm.type==='todo' && fm.stage==='in-progress'){
+      result.active.push({name:f.basename, priority:fm.priority||'medium', project:fm.project||'unknown'});
+    }
+    if(fm.type==='todo' && fm.stage==='backlog'){
+      result.backlog.push({name:f.basename, priority:fm.priority||'medium', project:fm.project||'unknown'});
+    }
+    if(fm.type==='todo' && fm.stage==='review'){
+      result.review.push({name:f.basename, project:fm.project||'unknown'});
+    }
+    if(fm.type==='decision'){
+      var created = new Date(fm.created);
+      if((Date.now()-created)<7*86400000){
+        result.decisions.push({name:f.basename, created:fm.created});
+      }
+    }
+  });
+
+  var prio = {high:0, medium:1, low:2};
+  result.backlog.sort(function(a,b){ return (prio[a.priority]??1)-(prio[b.priority]??1); });
+  result.backlog = result.backlog.slice(0,5);
+
+  var resolved = app.metadataCache.resolvedLinks || {};
+  var allLinked = new Set();
+  Object.values(resolved).forEach(function(targets){ Object.keys(targets).forEach(function(t){ allLinked.add(t); }); });
+  var mdFiles = files.filter(function(f){ return f.extension==='md'; });
+  result.orphans = mdFiles.filter(function(f){ return !allLinked.has(f.path); }).length;
+
+  var unresolvedLinks = app.metadataCache.unresolvedLinks || {};
+  var unresolvedCount = 0;
+  Object.values(unresolvedLinks).forEach(function(targets){ unresolvedCount += Object.keys(targets).length; });
+  result.unresolved = unresolvedCount;
+
+  var taskCount = 0;
+  mdFiles.forEach(function(f){
+    var cache = app.metadataCache.getFileCache(f);
+    if(cache?.listItems){
+      cache.listItems.forEach(function(li){ if(li.task && li.task!==' ' && li.task!=='x') taskCount++; });
+    }
+  });
+  result.openTasks = taskCount;
+
+  return JSON.stringify(result);
+})()
+`.replace(/\n/g, ' ').trim();
+
+    const raw = execCliSafe(`eval code="${batchCode.replace(/"/g, '\\"')}"`);
+
+    if (raw) {
+      const data = JSON.parse(raw) as {
+        active: Array<{ name: string; priority: string; project: string }>;
+        backlog: Array<{ name: string; priority: string; project: string }>;
+        review: Array<{ name: string; project: string }>;
+        decisions: Array<{ name: string; created: string }>;
+        orphans: number;
+        unresolved: number;
+        openTasks: number;
+      };
+
+      if (data.active.length > 0) {
         sections.push("🔨 Active Todos (in-progress):");
-        for (const t of activeTodos) {
+        for (const t of data.active) {
           sections.push(`  - ${t.name} (project: ${t.project}, priority: ${t.priority})`);
         }
       }
-    }
 
-    // 2. Backlog todos (top 5 by priority)
-    const backlogRaw = execCliSafe(
-      `eval code="JSON.stringify(app.vault.getMarkdownFiles().filter(f=>{const fm=app.metadataCache.getFileCache(f)?.frontmatter;return fm?.type==='todo'&&fm?.stage==='backlog'}).map(f=>{const fm=app.metadataCache.getFileCache(f).frontmatter;return{name:f.basename,priority:fm.priority||'medium',project:fm.project||'unknown'}}).sort((a,b)=>{const o={high:0,medium:1,low:2};return(o[a.priority]??1)-(o[b.priority]??1)}).slice(0,5))"`,
-    );
-    if (backlogRaw) {
-      const backlog = JSON.parse(backlogRaw) as Array<{ name: string; priority: string; project: string }>;
-      if (backlog.length > 0) {
+      if (data.backlog.length > 0) {
         sections.push("\n📋 Backlog (top 5 by priority):");
-        for (const t of backlog) {
+        for (const t of data.backlog) {
           sections.push(`  - ${t.name} (priority: ${t.priority})`);
         }
       }
-    }
 
-    // 3. Todos in review
-    const reviewRaw = execCliSafe(
-      `eval code="JSON.stringify(app.vault.getMarkdownFiles().filter(f=>{const fm=app.metadataCache.getFileCache(f)?.frontmatter;return fm?.type==='todo'&&fm?.stage==='review'}).map(f=>({name:f.basename,project:app.metadataCache.getFileCache(f).frontmatter.project||'unknown'})))"`,
-    );
-    if (reviewRaw) {
-      const review = JSON.parse(reviewRaw) as Array<{ name: string; project: string }>;
-      if (review.length > 0) {
+      if (data.review.length > 0) {
         sections.push("\n👀 Awaiting Review:");
-        for (const t of review) {
+        for (const t of data.review) {
           sections.push(`  - ${t.name} (${t.project})`);
         }
       }
-    }
 
-    // 4. Recent decisions (last 7 days)
-    const decisionsRaw = execCliSafe(
-      `eval code="JSON.stringify(app.vault.getMarkdownFiles().filter(f=>{const fm=app.metadataCache.getFileCache(f)?.frontmatter;if(!fm||fm.type!=='decision')return false;const created=new Date(fm.created);return(Date.now()-created)<7*86400000}).map(f=>{const fm=app.metadataCache.getFileCache(f).frontmatter;return{name:f.basename,created:fm.created}}))"`,
-    );
-    if (decisionsRaw) {
-      const decisions = JSON.parse(decisionsRaw) as Array<{ name: string; created: string }>;
-      if (decisions.length > 0) {
+      if (data.decisions.length > 0) {
         sections.push("\n🧠 Recent Decisions (last 7 days):");
-        for (const d of decisions) {
+        for (const d of data.decisions) {
           sections.push(`  - ${d.name} (${d.created})`);
         }
       }
-    }
 
-    // 5. Vault health
-    const orphans = execCliSafe("orphans total");
-    const unresolved = execCliSafe("unresolved total");
-    const openTasks = execCliSafe("tasks todo total");
-
-    if (orphans !== null || unresolved !== null || openTasks !== null) {
       sections.push("\n🔗 Vault Health:");
-      const parts: string[] = [];
-      if (orphans !== null) parts.push(`Orphans: ${orphans}`);
-      if (unresolved !== null) parts.push(`Unresolved links: ${unresolved}`);
-      if (openTasks !== null) parts.push(`Open tasks: ${openTasks}`);
-      sections.push(`  ${parts.join(" | ")}`);
+      sections.push(`  Orphans: ${data.orphans} | Unresolved links: ${data.unresolved} | Open tasks: ${data.openTasks}`);
     }
   } catch {
     // Context building failed — non-fatal, return what we have
