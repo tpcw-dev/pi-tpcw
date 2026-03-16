@@ -15,12 +15,21 @@ Inspired by: Visual Storyteller (narrative arc), Software Architect (C4 levels, 
 
 ## Before Drawing: Load References
 
-MANDATORY — read both files before any generation:
+MANDATORY — read both files before any generation. Use `bash` to resolve the package path first:
 
-1. **Excalidraw reference**: `~/pi-tpcw/skills/draw-diagram/data/excalidraw-reference.md`
+```bash
+PI_TPCW=$(find ~/.pi/agent -path "*/pi-tpcw/skills/draw-diagram/data" -type d 2>/dev/null | head -1 | sed 's|/skills/draw-diagram/data||')
+echo "pi-tpcw root: $PI_TPCW"
+```
+
+1. **Excalidraw reference**: `{PI_TPCW}/skills/draw-diagram/data/excalidraw-reference.md`
    — JSON schema, element templates, color palette, binding rules
-2. **Learned preferences**: `~/pi-tpcw/skills/draw-diagram/data/preferences.md`
+2. **Learned preferences**: `{PI_TPCW}/skills/draw-diagram/data/preferences.md`
    — Accumulated patterns from past training sessions
+
+If the find returns empty, try these fallback paths in order:
+- `~/pi-tpcw/skills/draw-diagram/data/`
+- The directory containing this agent file, then `../../skills/draw-diagram/data/`
 
 ## Design Principles
 
