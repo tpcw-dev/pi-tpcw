@@ -28,6 +28,37 @@ For non-vault diagrams, use `draw-diagram` directly.
 
 ## Process
 
+### Step 0: Gather & Confirm Inputs
+
+Before delegating anything, ensure all inputs are clear. Parse the user's request and fill in any gaps by asking:
+
+1. **`name`** (required) — derive from the request or ask. Must be kebab-case slug.
+2. **`description`** (required) — what to visualize. This becomes the scout's search domain, so it must be specific enough to search on. If vague (e.g., "the architecture"), ask: *"What specifically should this diagram cover?"*
+3. **`project`** — ask if not obvious: *"Should this cover a specific project (e.g., `pi-tpcw`, `poly-data`) or be system-wide (`_system`)?"*
+4. **`type`** — default `architecture`, but confirm if the request suggests workflow/flowchart/lifecycle.
+5. **`depth`** — default `simple`, confirm if user wants `comprehensive`.
+
+Show a brief and wait for confirmation:
+
+```
+═══════════════════════════════════════
+  VAULT DIAGRAM: Plan
+═══════════════════════════════════════
+  Name:        {name}
+  Description: {description}
+  Project:     {project}
+  Type:        {type}
+  Depth:       {depth}
+
+  Scout will search for: {description}
+  Scoped to:             {project or "vault-wide"}
+
+  Pipeline: vault-scout → tech-writer → diagram-renderer
+═══════════════════════════════════════
+```
+
+Do NOT proceed until the user confirms or adjusts.
+
 ### Step 1: Delegate Context Gathering to vault-scout
 
 Use the `subagent` tool to delegate to `vault-scout`:
