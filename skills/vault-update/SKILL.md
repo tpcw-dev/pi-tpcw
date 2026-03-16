@@ -160,7 +160,7 @@ Auto-fix any issues via `obsidian vault="<vault>" property:set`. Halt only on un
 1. `obsidian vault="<vault>" files folder="projects/{project}/"` → scan project folder
 2. `obsidian vault="<vault>" properties path="..." format=json` → get metadata for each entry
 3. Rebuild index grouped by type with wikilinks and descriptions
-4. Write with `obsidian vault="<vault>" create ... overwrite silent`
+4. Write with `obsidian vault="<vault>" create path="..." content="..." overwrite silent`
 
 **Master index** (`_system/_master-index.md`):
 1. Scan `projects/` for all project folders
@@ -225,7 +225,7 @@ Load entry via `obsidian vault="<vault>" read path="..."`. If not found, halt. I
 Use `obsidian vault="<vault>" property:set path="..." name="..." value="..."`. Automatically add `last-modified: "{YYYY-MM-DD}"`.
 
 For tag changes: `obsidian vault="<vault>" property:set path="..." name="tags" value="..." type=list`.
-For content body changes: read via `obsidian vault="<vault>" read`, then write back with `obsidian vault="<vault>" create ... overwrite silent`.
+For content body changes: read via `obsidian vault="<vault>" read`, then write back with `obsidian vault="<vault>" create path="..." content="..." overwrite silent`.
 
 Preserve all fields not included in updates.
 

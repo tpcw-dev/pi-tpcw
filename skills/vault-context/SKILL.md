@@ -223,7 +223,7 @@ For each merged extraction, invoke vault-update logic:
 
 1. **Dedup check** — `obsidian vault="{vault_name}" search query="..." format=json`
 2. **Classify & tag** — refine type, generate 2-5 kebab-case tags, determine target
-3. **Write** — build frontmatter, write via `obsidian vault="{vault_name}" create ... overwrite silent`
+3. **Write** — build frontmatter, write via `obsidian vault="{vault_name}" create path="{target}/{slug}" content="..." overwrite silent`
 4. **Validate** — read back and verify schema compliance, auto-fix
 5. **Index** — regenerate project and master index
 6. **Commit** — git commit (only on last extraction)

@@ -318,7 +318,7 @@ total-entries: 0
 2. Update frontmatter: increment `project-count`, update `last-updated`
 3. Append new project line under `## Projects`: `- [[projects/{project}/_project-index|{project}]] — 0 entries`
 4. Preserve all existing content
-5. Write back via `obsidian vault="{vault_name}" create ... overwrite silent`
+5. Write back via `obsidian vault="{vault_name}" create path="..." content="..." overwrite silent`
 
 ---
 

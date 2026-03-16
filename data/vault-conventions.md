@@ -155,6 +155,40 @@ Format: `{short-descriptive-slug}.excalidraw.md`
 
 Use the `vault-diagram` skill to create/update diagrams. Reference data in `skills/vault-diagram/data/excalidraw-reference.md`.
 
+## Obsidian CLI Reference
+
+The vault is accessed through the Obsidian CLI. Key commands:
+
+```bash
+# Search (returns JSON array of matching file paths)
+obsidian vault="<vault>" search query="<text>" format=json
+
+# Read a file (by path without .md extension)
+obsidian vault="<vault>" read file="<path>"
+
+# Create or overwrite a file — ⚠️ use path=, NOT file=
+obsidian vault="<vault>" create path="<path>" content="<content>" overwrite silent
+
+# Set a frontmatter property
+obsidian vault="<vault>" property:set file="<path>" name="<key>" value="<value>"
+
+# Run JavaScript against the vault (batched queries)
+obsidian vault="<vault>" eval code="<js>"
+
+# Delete a file
+obsidian vault="<vault>" delete file="<path>"
+
+# List all files
+obsidian vault="<vault>" files
+```
+
+### Sharp Constraints
+
+- **`create` uses `path=`** — the `file=` parameter does NOT work for create; it silently creates `Untitled.md` instead
+- **`read` and `delete` use `file=`** — these commands use `file=`, not `path=`
+- **Each CLI call spawns an Electron process** — batch multiple reads into a single `eval` call when possible
+- **`.base` and `.excalidraw.md` files** must be written via filesystem tools, not CLI (CLI expects markdown)
+
 ## Idempotency Rules
 
 - Writing the same content twice → caught by dedup (skip or flag)
