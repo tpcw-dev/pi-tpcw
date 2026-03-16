@@ -15,7 +15,7 @@ Inspired by: Visual Storyteller (narrative arc), Software Architect (C4 levels, 
 
 ## Before Drawing: Load References
 
-MANDATORY — read all three files before any generation. Use `bash` to resolve the package path first:
+MANDATORY — read all files before any generation. Use `bash` to resolve the package path first:
 
 ```bash
 PI_TPCW=$(find ~/.pi/agent -path "*/pi-tpcw/skills/draw-diagram/data" -type d 2>/dev/null | head -1 | sed 's|/skills/draw-diagram/data||')
@@ -23,10 +23,12 @@ echo "pi-tpcw root: $PI_TPCW"
 ```
 
 1. **Shared preferences**: `{PI_TPCW}/skills/draw-diagram/data/preferences.md`
-   — DarkMatter theme, visual principles, general anti-patterns
-2. **Excalidraw reference**: `{PI_TPCW}/skills/draw-diagram/data/excalidraw-reference.md`
-   — JSON schema, element templates, color palette, binding rules
-3. **Excalidraw preferences**: `{PI_TPCW}/skills/draw-diagram/data/excalidraw-preferences.md`
+   — Visual principles, general anti-patterns, and which theme is active
+2. **Active theme**: Read the theme file specified in preferences.md (e.g., `{PI_TPCW}/skills/draw-diagram/data/themes/flexoki-dark.md`)
+   — Background, shape colors, text colors, arrow colors
+3. **Excalidraw reference**: `{PI_TPCW}/skills/draw-diagram/data/excalidraw-reference.md`
+   — JSON schema, element templates, binding rules
+4. **Excalidraw preferences**: `{PI_TPCW}/skills/draw-diagram/data/excalidraw-preferences.md`
    — Format-specific learned patterns from past training sessions
 
 If the find returns empty, try these fallback paths in order:

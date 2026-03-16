@@ -3,67 +3,33 @@
 Shared visual preferences applied by ALL diagram renderers (Excalidraw, Canvas, future formats).
 Format-specific learned patterns live in `{format}-preferences.md`.
 
-Before drawing any diagram, read this file first, then the format-specific preferences.
+Before drawing any diagram, read this file first, then the active theme, then format-specific preferences.
+
+---
+
+## Active Theme
+
+**`flexoki-dark`**
+
+Load the theme file: `{skill_dir}/data/themes/flexoki-dark.md`
+
+Available presets:
+- `flexoki-dark` — Inky, warm, inspired by analog printing inks (active)
+- `darkmatter` — High-contrast dark with amber/teal accents
+
+Theme files live in `{skill_dir}/data/themes/`. Each contains background, shape colors,
+text colors, arrow/edge colors, and canvas color mapping — all with the same semantic
+structure so renderers can swap themes without changing logic.
 
 ---
 
 ## General Preferences
 
 - Use clean/modern style unless explicitly asked for hand-drawn
-- Always use monospace typography for all text
+- Use monospace typography for all text
 - Always use descriptive element IDs (e.g., `sage_rect`, `arrow_scan_to_update`)
 - Build diagrams section-by-section, never all at once for large diagrams
 - Diagrams should **argue visually** — every shape mirrors the concept it represents
-
----
-
-## Theme: DarkMatter (Active Default)
-
-Derived from [tweakcn DarkMatter](https://tweakcn.com/r/themes/darkmatter.json).
-Dark background, warm amber/orange primary, teal secondary, monospace typography.
-Use this palette for ALL diagrams unless explicitly overridden.
-
-### Background
-
-| Property | Value | Notes |
-|----------|-------|-------|
-| Background | `#121113` | DarkMatter dark background |
-
-### Shape Colors (DarkMatter Dark Mode)
-
-| Semantic Purpose | Fill | Stroke | Use For |
-|------------------|------|--------|---------|
-| Primary/Hero | `#e78a53` | `#d87943` | Central components, hero elements (e.g., vault-update) |
-| Secondary/Teal | `#5f8787` | `#4a6b6b` | Supporting components, I/O layers |
-| Gold/Highlight | `#fbcb97` | `#d87943` | Decisions, annotations, callouts |
-| Card/Container | `#222222` | `#333333` | Group containers, background panels |
-| Muted/Inactive | `#333333` | `#888888` | Disabled, inactive, dashed outlines |
-| Sage/AI | `#6d28d9` | `#4c1d95` | Sage persona, AI orchestration (keep purple) |
-| Success/Output | `#047857` | `#065f46` | Completion, vault store, outputs |
-| Error/Destructive | `#ef4444` | `#b91c1c` | Failures, resets, warnings |
-| Subagent/Isolated | `#333333` | `#5f8787` | Subagent containers (dashed border, teal stroke) |
-| External/Source | `#222222` | `#888888` | External data sources |
-
-### Text Colors (DarkMatter Dark Mode)
-
-| Level | Color | Use For |
-|-------|-------|---------|
-| Title | `#fbcb97` | Main title, section headings (gold) |
-| Subtitle | `#e78a53` | Subheadings, entity names (amber) |
-| Body/Detail | `#999999` | Annotations, descriptions |
-| On dark fills | `#c1c1c1` | Text inside dark shapes (foreground) |
-| On primary fills | `#121113` | Text inside amber/teal shapes (background) |
-| On hero fills | `#121113` | Text inside hero element |
-
-### Arrow/Edge Colors (DarkMatter Dark Mode)
-
-| Type | Color | Style |
-|------|-------|-------|
-| Data flow | `#e78a53` | Solid, follows source stroke |
-| Orchestration | `#6d28d9` | Dotted, purple for Sage delegation |
-| Structural | `#888888` | Solid, neutral gray |
-| Write path | `#047857` | Solid, green for vault writes |
-| Subagent delegation | `#5f8787` | Dashed, teal |
 
 ---
 

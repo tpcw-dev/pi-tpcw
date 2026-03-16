@@ -3,25 +3,15 @@
 Format-specific preferences for the JSON Canvas renderer.
 Accumulated through training sessions with `train-skill-in-loop-manual`.
 
-Before drawing, also load the shared `preferences.md` for theme and general principles.
+Before drawing, also load the shared `preferences.md` and the active theme for colors.
 
 ---
 
-## DarkMatter Theme Mapping
+## Canvas Color Rules
 
-JSON Canvas uses preset colors `"1"`-`"6"` or hex strings. Map DarkMatter semantics to hex:
-
-| Semantic Purpose | Canvas Color | Notes |
-|------------------|-------------|-------|
-| Primary/Hero | `"#e78a53"` | Amber — central components |
-| Secondary/Teal | `"#5f8787"` | Supporting components |
-| Gold/Highlight | `"#fbcb97"` | Decisions, callouts |
-| Card/Container | `"#222222"` | Group containers |
-| Sage/AI | `"#6d28d9"` | AI orchestration |
-| Success/Output | `"#047857"` | Completion, outputs |
-| Error/Destructive | `"#ef4444"` | Failures, warnings |
-
-Use hex values, NOT preset numbers — presets vary per Obsidian theme.
+- Always use hex color values from the active theme's "Canvas Color Mapping" section
+- NEVER use preset numbers (`"1"`-`"6"`) — those vary per Obsidian theme and won't match
+- Apply semantic colors consistently: hero = Primary/Hero, containers = Card/Container, etc.
 
 ---
 

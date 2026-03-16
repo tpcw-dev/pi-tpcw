@@ -17,7 +17,7 @@ Inspired by: Visual Storyteller (narrative arc), Software Architect (C4 levels, 
 
 ## Before Drawing: Load References
 
-MANDATORY — read all three files before any generation. Use `bash` to resolve the package path first:
+MANDATORY — read all files before any generation. Use `bash` to resolve the package path first:
 
 ```bash
 PI_TPCW=$(find ~/.pi/agent -path "*/pi-tpcw/skills/draw-diagram/data" -type d 2>/dev/null | head -1 | sed 's|/skills/draw-diagram/data||')
@@ -25,10 +25,12 @@ echo "pi-tpcw root: $PI_TPCW"
 ```
 
 1. **Shared preferences**: `{PI_TPCW}/skills/draw-diagram/data/preferences.md`
-   — DarkMatter theme, visual principles, general anti-patterns
-2. **Canvas reference**: `{PI_TPCW}/skills/draw-diagram/data/canvas-reference.md`
+   — Visual principles, general anti-patterns, and which theme is active
+2. **Active theme**: Read the theme file specified in preferences.md (e.g., `{PI_TPCW}/skills/draw-diagram/data/themes/flexoki-dark.md`)
+   — Background, shape colors, text colors, arrow/edge colors, canvas color mapping
+3. **Canvas reference**: `{PI_TPCW}/skills/draw-diagram/data/canvas-reference.md`
    — JSON Canvas spec, node types, edge spec, validation rules, examples
-3. **Canvas preferences**: `{PI_TPCW}/skills/draw-diagram/data/canvas-preferences.md`
+4. **Canvas preferences**: `{PI_TPCW}/skills/draw-diagram/data/canvas-preferences.md`
    — Format-specific learned patterns from past training sessions
 
 If the find returns empty, try these fallback paths in order:
@@ -120,17 +122,8 @@ Fix any issues found.
 
 ## Color Mapping
 
-Map DarkMatter theme to canvas hex colors (do NOT use preset `"1"`-`"6"` — those vary by Obsidian theme):
-
-| Semantic Purpose | Canvas Color |
-|------------------|-------------|
-| Primary/Hero | `"#e78a53"` |
-| Secondary/Teal | `"#5f8787"` |
-| Gold/Highlight | `"#fbcb97"` |
-| Card/Container | `"#222222"` |
-| Sage/AI | `"#6d28d9"` |
-| Success/Output | `"#047857"` |
-| Error/Destructive | `"#ef4444"` |
+Colors come from the active theme file (loaded in Step 2 above). Use the "Canvas Color Mapping"
+section from the theme. NEVER use preset numbers (`"1"`-`"6"`) — those vary per Obsidian theme.
 
 ## Text Content in Nodes
 
@@ -143,11 +136,11 @@ Canvas text nodes render Markdown. Use this for rich content:
   "x": 0, "y": 0,
   "width": 400, "height": 250,
   "text": "# Component Name\n\n**Role**: Central orchestrator\n\n- Receives input from scouts\n- Delegates to workers\n- Validates output",
-  "color": "#e78a53"
+  "color": "#DA702C"
 }
 ```
 
-Use `\n` for line breaks (NOT literal `\\n`).
+Use `\n` for line breaks (NOT literal `\\n`). Color hex comes from the active theme's Primary/Hero.
 
 ## Output
 

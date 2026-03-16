@@ -36,7 +36,7 @@ Optional markdown description visible in reading mode.
   "source": "https://excalidraw.com",
   "elements": [...],
   "appState": {
-    "viewBackgroundColor": "#ffffff",
+    "viewBackgroundColor": "{theme.background}",
     "gridSize": 20
   },
   "files": {}
@@ -85,7 +85,7 @@ tags: [excalidraw]
   "source": "https://excalidraw.com",
   "elements": [],
   "appState": {
-    "viewBackgroundColor": "#ffffff",
+    "viewBackgroundColor": "{theme.background}",
     "gridSize": 20
   },
   "files": {}
@@ -171,44 +171,17 @@ When text is inside a shape:
 
 ---
 
-## Vault Color Palette
+## Colors
 
-Semantic colors for vault diagrams. Consistent visual language across all vault drawings.
-
-### Shape Colors
-
-| Semantic Purpose | Fill | Stroke | Use For |
-|------------------|------|--------|---------|
-| Primary/Neutral | `#3b82f6` | `#1e3a5f` | Core vault components |
-| Secondary | `#60a5fa` | `#1e3a5f` | Supporting components |
-| Tertiary | `#93c5fd` | `#1e3a5f` | Background elements |
-| Start/Trigger | `#fed7aa` | `#c2410c` | Entry points, triggers |
-| End/Success | `#a7f3d0` | `#047857` | Completion, outputs |
-| Warning/Reset | `#fee2e2` | `#dc2626` | Errors, resets |
-| Decision | `#fef3c7` | `#b45309` | Conditionals, routing |
-| Sage/AI | `#ddd6fe` | `#6d28d9` | Sage persona, AI actions |
-| Inactive | `#dbeafe` | `#1e40af` | Disabled (dashed stroke) |
-| Error | `#fecaca` | `#b91c1c` | Failures |
-
-### Text Colors
-
-| Level | Color | Use For |
-|-------|-------|---------|
-| Title | `#1e40af` | Section headings |
-| Subtitle | `#3b82f6` | Subheadings |
-| Body/Detail | `#64748b` | Descriptions, annotations |
-| On light fills | `#374151` | Text inside light shapes |
-| On dark fills | `#ffffff` | Text inside dark shapes |
-
-### Arrows & Lines
-
-- Arrows: Use source element's stroke color
-- Structural lines: `#1e3a5f` or `#64748b`
-- Marker dots: `#3b82f6` (fill + stroke)
+> **Colors come from the active theme file** (see `preferences.md` → `themes/` directory).
+> The theme provides background, shape fills/strokes, text colors, and arrow colors.
+> Do NOT hardcode colors — always use the semantic mapping from the active theme.
 
 ---
 
 ## Element Templates
+
+Colors in templates below are placeholders — replace with semantic colors from the active theme.
 
 ### Free-Floating Text
 
@@ -218,7 +191,7 @@ Semantic colors for vault diagrams. Consistent visual language across all vault 
   "x": 100, "y": 100, "width": 200, "height": 25,
   "text": "Section Title", "originalText": "Section Title",
   "fontSize": 20, "fontFamily": 3, "textAlign": "left", "verticalAlign": "top",
-  "strokeColor": "#1e40af", "backgroundColor": "transparent",
+  "strokeColor": "{theme.text.title}", "backgroundColor": "transparent",
   "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
   "roughness": 0, "opacity": 100, "angle": 0,
   "seed": 11111, "version": 1, "versionNonce": 22222,
@@ -233,7 +206,7 @@ Semantic colors for vault diagrams. Consistent visual language across all vault 
 {
   "type": "rectangle", "id": "rect_xxx",
   "x": 100, "y": 100, "width": 180, "height": 60,
-  "strokeColor": "#1e3a5f", "backgroundColor": "#3b82f6",
+  "strokeColor": "{theme.shape.primary.stroke}", "backgroundColor": "{theme.shape.primary.fill}",
   "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
   "roughness": 0, "opacity": 100, "angle": 0,
   "seed": 12345, "version": 1, "versionNonce": 67890,
@@ -246,7 +219,7 @@ Semantic colors for vault diagrams. Consistent visual language across all vault 
   "x": 110, "y": 112, "width": 160, "height": 25,
   "text": "Component", "originalText": "Component",
   "fontSize": 16, "fontFamily": 3, "textAlign": "center", "verticalAlign": "middle",
-  "strokeColor": "#ffffff", "backgroundColor": "transparent",
+  "strokeColor": "{theme.text.on_primary}", "backgroundColor": "transparent",
   "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
   "roughness": 0, "opacity": 100, "angle": 0,
   "seed": 11111, "version": 1, "versionNonce": 22222,
@@ -261,7 +234,7 @@ Semantic colors for vault diagrams. Consistent visual language across all vault 
 {
   "type": "arrow", "id": "arrow_xxx",
   "x": 282, "y": 130, "width": 118, "height": 0,
-  "strokeColor": "#1e3a5f", "backgroundColor": "transparent",
+  "strokeColor": "{theme.arrow.structural}", "backgroundColor": "transparent",
   "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
   "roughness": 0, "opacity": 100, "angle": 0,
   "seed": 33333, "version": 1, "versionNonce": 44444,
@@ -280,7 +253,7 @@ Semantic colors for vault diagrams. Consistent visual language across all vault 
 {
   "type": "ellipse", "id": "dot_xxx",
   "x": 94, "y": 94, "width": 12, "height": 12,
-  "strokeColor": "#3b82f6", "backgroundColor": "#3b82f6",
+  "strokeColor": "{theme.shape.primary.fill}", "backgroundColor": "{theme.shape.primary.fill}",
   "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
   "roughness": 0, "opacity": 100, "angle": 0,
   "seed": 66666, "version": 1, "versionNonce": 77777,
