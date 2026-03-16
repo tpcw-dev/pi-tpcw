@@ -48,3 +48,11 @@ The following currently live in `~/.pi/agent/` and should be moved into this pac
 - Never hardcode secrets
 - Update `package.json` `pi.skills` / `pi.extensions` arrays when adding new assets
 - Update `README.md` when adding user-facing features
+
+## Testing Rule
+
+- **All new features must include tests using `pi-test-harness`.**
+- When developing a new skill, extension, subagent, or any functional code, write accompanying tests before considering the work complete.
+- Use `pi-test-harness` as the test runner — do not introduce alternative test frameworks.
+- Tests live alongside the feature they cover (e.g., `skills/<skill-name>/tests/` or colocated test files).
+- A feature without tests is not done.
