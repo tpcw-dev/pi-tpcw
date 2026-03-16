@@ -17,6 +17,7 @@ Gather these from the user before starting:
 | `agent` | No | auto-detect | Subagent to use (e.g., `diagram-renderer`). If not specified, pick from available agents. |
 | `input` | ✅ YES | — | Input to pass to the skill — what the user would normally say |
 | `scope` | ✅ YES | — | What the agent is allowed to change between iterations |
+| `existing_output` | No | — | Path to existing output from a previous run. If provided, skip the first spawn and go straight to feedback. Use when iterating on output from a prior session. |
 | `max_iterations` | No | 10 | Safety cap |
 
 ### Agent Mapping
@@ -65,6 +66,7 @@ Build a task string for the subagent that includes:
   Agent:      {agent} (subagent — isolated context)
   Input:      {summary}
   Scope:      {scope}
+  Start:      {existing_output ? "feedback-first (existing output)" : "fresh run"}
   Max:        {max_iterations} iterations
 
   Each iteration spawns a fresh subagent.
@@ -76,9 +78,19 @@ Wait for user confirmation.
 
 ## Training Loop
 
+### Entry Point
+
+If `existing_output` is provided:
+1. Skip step A for the first iteration
+2. Read the existing output file
+3. Go directly to **B. PRESENT RESULT** with the existing output
+4. Collect feedback, then proceed to step A for iteration 2+
+
+This avoids wasting an iteration re-generating output you already have from a prior session.
+
 ### For each iteration (1 to max_iterations):
 
-#### A. SPAWN SUBAGENT
+#### A. SPAWN SUBAGENT (skip on iteration 1 if existing_output provided)
 
 Build the task with current input + any accumulated feedback:
 
