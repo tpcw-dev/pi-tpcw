@@ -55,6 +55,16 @@ If the find returns empty, try these fallback paths in order:
 - Guide the eye: left→right or top→bottom for sequences, radial for hub-and-spoke
 - Use **groups** to separate phases or context shifts
 
+### Node Sizing (CRITICAL — #1 failure mode)
+Obsidian canvas makes undersized nodes scrollable, cutting off text. ALWAYS calculate size from content:
+
+```
+width  = max(longest_line_chars × 10 + 80, 300)
+height = header_lines × 44 + other_lines × 30 + 60
+```
+
+Keep text to **~25 chars per line max**. If computed node width < 280px in a row, split into more rows.
+
 ### Canvas-Specific Strengths
 - **File nodes**: Embed vault entries directly — powerful for architecture diagrams referencing vault docs
 - **Markdown in text nodes**: Use headers (`#`), bold (`**`), lists (`-`) for rich content inside nodes
@@ -98,12 +108,17 @@ Build the canvas:
 ```
 
 2. Generate unique 16-char hex IDs for each node and edge
-3. Position nodes with 50-100px spacing, align to grid (multiples of 20)
-4. Use DarkMatter hex colors (from shared preferences), NOT preset numbers
-5. Place group nodes first (they render as bottom layer)
-6. Add text/file nodes inside group bounds
-7. Add edges with `fromSide`/`toSide` for clean routing
-8. Use `label` on edges for relationship descriptions
+3. **Write concise text first** — keep lines ≤25 chars. Use markdown headers, bold, bullets
+4. **Calculate node sizes from text** — use the sizing formula BEFORE positioning:
+   - `width = max(longest_line × 10 + 80, 300)`
+   - `height = header_lines × 44 + other_lines × 30 + 60`
+5. **Split rows if needed** — if >5 nodes per row, check if computed width < 280px → split into 2 rows
+6. Position nodes with 25-30px gaps, align to grid (multiples of 10)
+7. Use theme hex colors, NOT preset numbers
+8. Place group nodes first (they render as bottom layer)
+9. Add text/file nodes inside group bounds, then resize groups to fit children + 30px padding
+10. **Consolidate edges** — target 8-10 max. Use group-to-node edges for many-to-one patterns
+11. Add edges with `fromSide`/`toSide` for clean routing, `label` for descriptions
 
 ### Step 5: Write
 Write the `.canvas` file to the specified output path.

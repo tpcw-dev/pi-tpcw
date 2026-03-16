@@ -163,7 +163,31 @@ Changes for next iteration:
   - {change description}
 ```
 
-#### F. LOOP BACK TO A
+#### F. VERIFY SUBAGENT APPLIED CHANGES
+
+After the subagent returns, **verify the output actually changed**:
+
+1. Compare the new output against the previous output — did the feedback get applied?
+2. Check measurable criteria from the feedback (e.g., "nodes overflowing" → check node sizes)
+
+If the subagent **did NOT apply the feedback** (output unchanged or issues persist):
+
+| Diagnosis | Fix |
+|-----------|-----|
+| Task prompt too vague | Make feedback more concrete — include specific values, before/after examples |
+| Subagent can't do the math | Include pre-computed values in the task (e.g., "set node X width to 450") |
+| Subagent wrote back same file | Include the feedback as the PRIMARY instruction, not an afterthought |
+| Model limitation | Try a different model or break the task into smaller steps |
+
+**RETRY the subagent** with an improved task prompt. Do NOT fall back to manual fixes
+from the main session. The training loop's value comes from teaching the subagent —
+manual fixes bypass learning and won't improve the agent or preferences.
+
+If a subagent fails 2 consecutive retries on the same feedback, THEN escalate to the user:
+*"The subagent isn't applying this feedback after 2 retries. Want me to adjust the
+agent definition, simplify the feedback, or try a different approach?"*
+
+#### G. LOOP BACK TO A
 
 Spawn a fresh subagent with updated task. The subagent reads the previous output file and applies the feedback.
 
@@ -225,7 +249,10 @@ git diff --cached --quiet || git commit -m "train: {skill} - {count} iterations,
 - ALWAYS present subagent results and wait for human feedback
 - ALWAYS check scope before applying changes
 - ALWAYS show what will change before spawning next subagent
+- ALWAYS verify the subagent actually applied the feedback before presenting to user
+- ALWAYS retry the subagent with improved task if feedback wasn't applied — never do manual fixes from the main session
 - ALWAYS offer to persist learnings at the end
 - NEVER modify preferences.md during the loop — only at the end, with user approval
 - NEVER exceed max_iterations — show summary and exit
 - NEVER skip the human feedback step — the human drives the loop
+- NEVER fall back to manual fixes in the main session — the whole point is training the subagent. If it can't apply feedback, fix the task prompt and retry.
