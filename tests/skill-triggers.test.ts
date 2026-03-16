@@ -1,7 +1,7 @@
 /**
  * skill-triggers.test.ts
  *
- * Validates that all 7 skill directories contain a SKILL.md with valid YAML
+ * Validates that all 11 skill directories contain a SKILL.md with valid YAML
  * frontmatter.  For each skill:
  *
  *   1. SKILL.md exists and is a regular file
@@ -27,7 +27,11 @@ const SKILLS_DIR = resolve(PKG_ROOT, "skills");
 // ── Expected skills (from package.json pi.skills, directory basenames) ──────
 
 const EXPECTED_SKILLS = [
+  "draw-diagram",
+  "search-agents",
+  "train-skill-in-loop-manual",
   "vault-context",
+  "vault-diagram",
   "vault-init",
   "vault-review",
   "vault-scan",
@@ -80,7 +84,7 @@ describe("skills directory", () => {
     expect(isDirectory(SKILLS_DIR)).toBe(true);
   });
 
-  it("contains exactly 7 skill sub-directories", () => {
+  it("contains exactly 11 skill sub-directories", () => {
     const entries = readdirSync(SKILLS_DIR).filter((e) =>
       isDirectory(resolve(SKILLS_DIR, e)),
     );
