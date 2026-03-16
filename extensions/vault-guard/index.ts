@@ -244,11 +244,12 @@ function expandHome(p: string): string {
 
 /**
  * Install bundled agent definitions to ~/.pi/agent/agents/ if they don't
- * already exist. Agents ship in pi-tpcw/agents/ and are copied on first
- * session_start so subagent discovery finds them.
+ * already exist. Agents ship in pi-tpcw/.pi/agents/ (the pi-subagent
+ * project-level discovery path) and are also copied to the user-level
+ * dir on session_start so they're available globally.
  */
 async function installBundledAgents(): Promise<void> {
-  const bundledDir = resolve(dirname(dirname(__dirname)), "agents");
+  const bundledDir = resolve(dirname(dirname(__dirname)), ".pi", "agents");
   const targetDir = resolve(homedir(), ".pi", "agent", "agents");
 
   if (!existsSync(bundledDir)) return;
