@@ -1,19 +1,19 @@
-# Draw Diagram — Learned Preferences
+# Draw Diagram — Shared Preferences
 
-This file accumulates visual preferences learned through training sessions.
-Before drawing any diagram, read this file and apply matching preferences.
+Shared visual preferences applied by ALL diagram renderers (Excalidraw, Canvas, future formats).
+Format-specific learned patterns live in `{format}-preferences.md`.
 
-Organized by context type. Each entry records what worked and what didn't.
+Before drawing any diagram, read this file first, then the format-specific preferences.
 
 ---
 
 ## General Preferences
 
-- Use `roughness: 0` (clean/modern) unless explicitly asked for hand-drawn
-- Use `fontFamily: 3` (monospace) for all text
+- Use clean/modern style unless explicitly asked for hand-drawn
+- Always use monospace typography for all text
 - Always use descriptive element IDs (e.g., `sage_rect`, `arrow_scan_to_update`)
-- Namespace seeds by section (100xxx, 200xxx, etc.)
-- Build JSON section-by-section, never all at once
+- Build diagrams section-by-section, never all at once for large diagrams
+- Diagrams should **argue visually** — every shape mirrors the concept it represents
 
 ---
 
@@ -23,11 +23,11 @@ Derived from [tweakcn DarkMatter](https://tweakcn.com/r/themes/darkmatter.json).
 Dark background, warm amber/orange primary, teal secondary, monospace typography.
 Use this palette for ALL diagrams unless explicitly overridden.
 
-### Canvas
+### Background
 
 | Property | Value | Notes |
 |----------|-------|-------|
-| `viewBackgroundColor` | `#121113` | DarkMatter dark background |
+| Background | `#121113` | DarkMatter dark background |
 
 ### Shape Colors (DarkMatter Dark Mode)
 
@@ -55,7 +55,7 @@ Use this palette for ALL diagrams unless explicitly overridden.
 | On primary fills | `#121113` | Text inside amber/teal shapes (background) |
 | On hero fills | `#121113` | Text inside hero element |
 
-### Arrows & Lines (DarkMatter Dark Mode)
+### Arrow/Edge Colors (DarkMatter Dark Mode)
 
 | Type | Color | Style |
 |------|-------|-------|
@@ -67,59 +67,35 @@ Use this palette for ALL diagrams unless explicitly overridden.
 
 ---
 
-## By Context Type
+## Design Principles
 
-### architecture
-- Use DarkMatter palette (dark canvas, amber/teal/purple semantics)
-- Hub-and-spoke layout works well for single-agent-multiple-skills architectures
-- Hero element (e.g., vault-update) should use Primary/Hero fill to draw the eye
-- Convergence pattern: show all write paths funneling to a single write gate
-- Group skills by category using Card/Container backgrounds
-- External sources on the left, vault/output on the right (left-to-right flow)
-- Subagent isolation shown with dashed borders and teal stroke
-- Annotation labels ("ALL WRITE PATHS CONVERGE HERE") guide the viewer's eye to key patterns
-- **Include detailed bullet-point text** inside each box — hooks, steps, features, counts. Use fontSize 12-14 for detail text. Boxes should be information-rich, not just labels.
-- **Arrow routing around boxes**: When arrows span multiple layers, route them through gaps between boxes using waypoints (intermediate points in the points array). NEVER route arrows through or over boxes. Use the spacing between columns as "arrow channels".
-- **Callout/annotation boxes** (like "BYPASSES write gate ⚠️" or "/tmp/ ephemeral I/O") must be placed in clear open space — not in the path of routed arrows. Position them in dedicated margins or below/above the elements they annotate.
-- **Spacing**: Moderate gaps between boxes (~80-120px horizontal, ~150-200px vertical between layers). Don't over-space — keep related items visually grouped — but leave enough room for arrow channels between columns.
-- **Maximize information density**: Include as much detail from the design doc as possible — hooks, steps, features, counts, model tiers, pipeline stages. Each box should be a mini-reference card. Expand canvas size rather than cutting content.
-- **Text binding**: ALL text inside a box MUST use `containerId` pointing to the parent rectangle, and the rectangle MUST list the text in its `boundElements` array. This prevents text from floating behind other elements.
+### Visual Argument (not Display)
+- The **Isomorphism Test**: remove all text — does the structure alone communicate the concept?
+- One-to-many? Use fan-out. Aggregation? Use convergence. Sequence? Use timeline. Loop? Use cycle.
+- Each major concept uses a **different** visual pattern. No uniform card grids.
 
-### workflow
-- When a design doc describes sequential steps, show them as a **vertical chain** inside the parent container — NOT as parallel fan-out arrows
-- Numbered steps (1. 2. 3.) inside a hero container effectively communicate sequence
-- Subagent isolation boundaries work well as dashed containers
-- Side-by-side layout is appropriate for truly parallel operations (e.g., reading Reference + Preferences)
-- The validation/fix cycle should use a dashed loop arrow with "fix loop" annotation
-- Arrow labels ("spawn subagent", "commits") add helpful context but aren't strictly required
+### Information Hierarchy
+- **Hero element**: largest, most whitespace around it
+- **Primary elements**: clear visual weight
+- **Secondary elements**: supporting, smaller
+- **Labels**: use typography to create hierarchy
 
-### flowchart
-*(no learned preferences yet)*
+### Narrative Structure
+- Every diagram has a **visual story**: entry point → development → resolution
+- Guide the eye: left→right or top→bottom for sequences, radial for hub-and-spoke
+- Use **gap/break patterns** to separate phases or context shifts
 
-### lifecycle
-*(no learned preferences yet)*
-
-### concept
-*(no learned preferences yet)*
+### Exhaustive Path Mapping (for workflows/flowcharts)
+- Map **all paths**, not just happy path
+- Every decision node: show both branches
+- Failure modes: use warning/error colors from palette
+- Dead ends: mark explicitly
 
 ---
 
-## Anti-Patterns (things that didn't work)
+## General Anti-Patterns
 
-- **Parallel fan-out for sequential steps**: When the design doc lists steps in order (CLI query → write doc → invoke renderer), do NOT show them as parallel arrows from a single source. The sequential relationship is the key information.
-- **Complex looping arrows**: Multi-point cycle arrows for validation loops can overlap and look messy — keep them simple.
-- **Arrows overlapping boxes**: Routed arrows that pass through other boxes make the diagram unreadable. Always route through gaps/channels between boxes. Use waypoints in the arrow's points array.
-- **Callout boxes in arrow paths**: Annotation boxes (warnings, notes) placed in the path of routed arrows get visually clipped. Place them in clear margins instead.
-- **Text elements behind/overlapping containers**: Free-floating text elements that aren't bound to a container rectangle can overlap with other boxes, appearing "in the background". ALWAYS bind text to its parent rectangle using `containerId` on the text and `boundElements` on the rectangle. If text must be free-floating (labels, annotations), position it in clear open space far from any boxes.
-- **Text overflowing containers**: When boxes have detailed bullet-point content, SIZE THE RECTANGLE TO FIT ALL THE TEXT. Calculate needed height: (line count × lineHeight × fontSize) + padding. Don't cram long text into small boxes — expand the box or expand the canvas.
-- **Canvas too small**: Don't constrain the diagram to a small canvas. If content needs more space, expand to 3000x4000+ pixels. A spacious diagram with clear separation is always better than a cramped one with overlaps.
-
----
-
-## Session Log
-
-Format: `YYYY-MM-DD | context-type | what was learned`
-
-- 2026-03-16 | workflow | Sequential vs parallel flow distinction; DarkMatter palette; 2 iterations to converge
-- 2026-03-16 | architecture | DarkMatter theme persisted as default; hub-and-spoke + convergence patterns; hero element emphasis; full oklch→hex conversion from tweakcn darkmatter.json
-- 2026-03-16 | architecture | Training loop: text binding (containerId/boundElements) critical for z-order; expand canvas for info density; arrow-through-box overlap still needs work (waypoint routing); 3 iterations to converge
+- **Uniform card grids**: Don't make everything the same shape and size. Differentiate by concept.
+- **Label-only boxes**: Include detail text inside boxes when the design doc provides it. Boxes should be information-rich.
+- **Cramped layouts**: If content needs more space, expand the canvas. Spacious with clear separation beats cramped with overlaps.
+- **Happy path only**: Always show error/failure paths in workflows.

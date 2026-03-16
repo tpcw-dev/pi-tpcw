@@ -1,11 +1,11 @@
 ---
 name: vault-diagram
-description: Create and update Excalidraw diagrams in the vault. Pure orchestrator — delegates to vault-scout (context), tech-writer (design doc), and diagram-renderer (Excalidraw). Triggers on "vault diagram", "visualize vault", "create vault diagram", "update vault diagram".
+description: "Create and update diagrams in the vault. Pure orchestrator — delegates to vault-scout (context), tech-writer (design doc), and excalidraw-renderer or canvas-renderer. Supports both Excalidraw (.excalidraw.md) and JSON Canvas (.canvas) formats. Triggers on \"vault diagram\", \"visualize vault\", \"create vault diagram\", \"update vault diagram\"."
 ---
 
 # Vault Diagram — Orchestrator
 
-Pure orchestrator. Delegates all work to three subagents: `vault-scout` (context gathering), `tech-writer` (design doc), and `diagram-renderer` (Excalidraw rendering). Handles vault-specific placement and git commits.
+Pure orchestrator. Delegates all work to three subagents: `vault-scout` (context gathering), `tech-writer` (design doc), and the appropriate renderer (`excalidraw-renderer` or `canvas-renderer`). Handles vault-specific placement and git commits.
 
 For non-vault diagrams, use `draw-diagram` directly.
 
@@ -16,15 +16,18 @@ For non-vault diagrams, use `draw-diagram` directly.
 | `name` | ✅ YES | — | Diagram slug (kebab-case) |
 | `project` | No | `_system` | Project name or `_system` for cross-project |
 | `description` | ✅ YES | — | What to visualize (natural language) |
+| `format` | No | `excalidraw` | `excalidraw` or `canvas` — passed to draw-diagram |
 | `type` | No | `architecture` | Passed to draw-diagram |
 | `depth` | No | `simple` | Passed to draw-diagram |
 
 ## Target Paths
 
-| Scope | Diagram Path | Design Doc Path |
-|-------|-------------|-----------------|
-| System-wide | `_system/diagrams/{name}.excalidraw.md` | `_system/diagrams/{name}.design.md` |
-| Project | `projects/{project}/diagrams/{name}.excalidraw.md` | `projects/{project}/diagrams/{name}.design.md` |
+| Scope | Format | Diagram Path | Design Doc Path |
+|-------|--------|-------------|-----------------|
+| System-wide | excalidraw | `_system/diagrams/{name}.excalidraw.md` | `_system/diagrams/{name}.design.md` |
+| System-wide | canvas | `_system/diagrams/{name}.canvas` | `_system/diagrams/{name}.design.md` |
+| Project | excalidraw | `projects/{project}/diagrams/{name}.excalidraw.md` | `projects/{project}/diagrams/{name}.design.md` |
+| Project | canvas | `projects/{project}/diagrams/{name}.canvas` | `projects/{project}/diagrams/{name}.design.md` |
 
 ## Process
 
@@ -47,13 +50,14 @@ Show a brief and wait for confirmation:
   Name:        {name}
   Description: {description}
   Project:     {project}
+  Format:      {format}
   Type:        {type}
   Depth:       {depth}
 
   Scout will search for: {description}
   Scoped to:             {project or "vault-wide"}
 
-  Pipeline: vault-scout → tech-writer → diagram-renderer
+  Pipeline: vault-scout → tech-writer → {excalidraw-renderer | canvas-renderer}
 ═══════════════════════════════════════
 ```
 
@@ -99,14 +103,26 @@ test -f {design_doc_path} && echo "✓ Design doc written" || echo "✗ Design d
 
 Read it briefly to confirm it has the expected sections (Entities, Relationships, etc.).
 
-### Step 4: Delegate Rendering to draw-diagram / diagram-renderer
+### Step 4: Delegate Rendering
 
-Delegate to `diagram-renderer` subagent:
+Based on `format`, delegate to the appropriate renderer subagent:
+
+#### If format = excalidraw (default)
 
 ```json
 {
-  "agent": "diagram-renderer",
+  "agent": "excalidraw-renderer",
   "task": "Draw an Excalidraw diagram.\n\n- context: {design_doc_path}\n- name: {name}\n- output_path: {diagram_path}\n- type: {type}\n- depth: {depth}",
+  "mode": "spawn"
+}
+```
+
+#### If format = canvas
+
+```json
+{
+  "agent": "canvas-renderer",
+  "task": "Draw a JSON Canvas diagram.\n\n- context: {design_doc_path}\n- name: {name}\n- output_path: {diagram_path}\n- type: {type}\n- depth: {depth}",
   "mode": "spawn"
 }
 ```
@@ -140,11 +156,11 @@ If the diagram already exists:
   Git:        {✓ committed | ⚠️ failed}
 
   Delegated to:
-    vault-scout      → context gathering
-    tech-writer      → design doc
-    diagram-renderer → excalidraw rendering
+    vault-scout            → context gathering
+    tech-writer            → design doc
+    {format}-renderer      → diagram rendering
 
-  View in Obsidian: Open {name}.excalidraw.md
+  View in Obsidian: Open {name}.excalidraw.md or {name}.canvas
   To iterate: use train-skill-in-loop-manual with draw-diagram
 ═══════════════════════════════════════
 ```
@@ -153,8 +169,8 @@ If the diagram already exists:
 
 - NEVER gather vault context directly — always delegate to vault-scout
 - NEVER write design docs directly — always delegate to tech-writer
-- NEVER generate diagram JSON — always delegate to diagram-renderer
-- ALWAYS delegate in order: vault-scout → tech-writer → diagram-renderer
+- NEVER generate diagram JSON — always delegate to excalidraw-renderer or canvas-renderer
+- ALWAYS delegate in order: vault-scout → tech-writer → renderer
 - ALWAYS persist the design doc alongside the diagram
 - ALWAYS git commit after writing
 - ALWAYS use spawn mode for subagent delegation (all three subagents need no session context)
