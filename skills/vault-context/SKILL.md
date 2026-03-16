@@ -1,11 +1,11 @@
 ---
 name: vault-context
-description: Onboard a project into the vault by scanning existing artifacts — README, docs, package files, configs — extracting knowledge (decisions, lessons, todos, ideas, patterns) and writing them through vault-update. Triggers on "onboard project", "context init", "scan project for knowledge", "add project context to vault", "initialize context".
+description: Onboard a project into the vault by scanning existing artifacts — README, docs, package files, configs, and source code — extracting knowledge through parallel specialized subagents and writing results through vault-update. Triggers on "onboard project", "context init", "scan project for knowledge", "add project context to vault", "initialize context".
 ---
 
-# Vault Context — Project Onboarding
+# Vault Context — Project Onboarding (Orchestrator)
 
-Onboard a project into the vault by scanning its existing artifacts, extracting knowledge objects, and feeding them through the vault-update skill as the shared write layer.
+Onboard a project into the vault by spawning three specialized subagents in parallel to extract different kinds of knowledge, then merging, classifying, and feeding results through vault-update.
 
 ## Prerequisites
 
@@ -19,14 +19,14 @@ Onboard a project into the vault by scanning its existing artifacts, extracting 
 |-------|----------|---------|-------------|
 | `project` | ✅ YES | — | Kebab-case project name |
 | `project_path` | ✅ YES | cwd | Path to the project directory |
-| `scan_depth` | No | `3` | How deep to recurse |
+| `scan_depth` | No | `3` | How deep to recurse for discovery |
 | `confidence_threshold` | No | `low` | Minimum confidence to include |
 
 If `project` is missing, ask for it. Validate it's kebab-case.
 
 ---
 
-## Phase 1: Scan Project Files
+## Phase 1: Discovery (In-Skill — Sequential)
 
 Use `find` to discover knowledge-bearing files. **Do NOT read file contents yet — discovery only.**
 
@@ -50,6 +50,8 @@ Use `find` to discover knowledge-bearing files. **Do NOT read file contents yet 
 | `.env.example` | config |
 | `Makefile`, `Justfile`, `Taskfile.yml` | build |
 | `docker-compose.yml`, `Dockerfile` | infra |
+| `.pi/agents/*.md` | agents |
+| `skills/*/SKILL.md` | skills |
 
 ### Exclusions (always skip)
 
@@ -69,90 +71,183 @@ find {project_path} -maxdepth {scan_depth} -type f \
   | sort
 ```
 
-Categorize each file and sort into Tier 1/2/3. If zero scannable files, halt.
+Categorize each file into Tier 1/2 and by category. Also identify source directories:
+
+```bash
+# Find source code directories for codebase-scanner
+find {project_path} -maxdepth 2 -type d \
+  \( -name "src" -o -name "lib" -o -name "app" -o -name "cmd" -o -name "pkg" \) \
+  ! -path "*/node_modules/*" ! -path "*/.git/*" 2>/dev/null
+
+# Detect primary language
+ls {project_path}/package.json {project_path}/tsconfig.json {project_path}/pyproject.toml \
+   {project_path}/Cargo.toml {project_path}/go.mod 2>/dev/null
+```
+
+If zero scannable files, halt.
+
+### Prepare Subagent Inputs
+
+Split the discovered files into three groups:
+
+| Subagent | Gets These Files | Purpose |
+|----------|-----------------|---------|
+| **structure-analyzer** | All files (full inventory) + dir tree | Components, relationships, boundaries |
+| **knowledge-extractor** | Tier 1 + Tier 2 documentation files only | Decisions, lessons, patterns, ideas, todos |
+| **codebase-scanner** | Source directories + entry points | Module graph, workflows, state machines, API surface |
 
 ---
 
-## Phase 2: Extract Knowledge
+## Phase 2: Parallel Extraction (Subagents — Concurrent)
 
-Read files in tier order (Tier 1 first). For each file, use extraction patterns to find knowledge-bearing passages.
+Spawn all three subagents in parallel using the `subagent` tool's parallel mode:
 
-### Extraction Patterns
-
-**README / Design Docs:** Architecture statements ("We use X for Y"), technology choices with rationale, design principles, trade-off discussions, setup requirements implying infra decisions.
-
-**BMAD Artifacts (PRDs, Specs, Brainstorms):** Requirements that became decisions, architecture from PRD, rejected alternatives, open questions (→ todos/ideas), brainstorm outputs.
-
-**TODO / Roadmap / Changelog:** Open items (→ todos), completed items with context (→ decisions/lessons), milestones (→ ideas/todos), breaking changes (→ decisions).
-
-**Package / Config Files:** Key dependencies (→ architectural decisions), scripts/commands (→ workflow decisions), config structure.
-
-**Spec Files:** Agent/workflow design, implementation notes, planned features (→ todos/ideas).
-
-### What to Skip
-
-Boilerplate docs (license, contributing), generated API docs, test fixtures, generic README sections unless they contain decisions.
-
-### Dedup Within Project
-
-Remove cross-file duplicates — same decision in README and PRD → keep the more detailed version.
-
-Each extraction becomes:
-```
+```json
 {
-  raw_content: "the extracted text",
-  source_file: "relative/path/to/file.md",
-  source_category: "readme|design|planning|documentation|bmad|specs|config|infra|package",
-  priority: "high|medium",  // Tier 1 = high, Tier 2/3 = medium
-  project: "{project}"
+  "tasks": [
+    {
+      "agent": "structure-analyzer",
+      "task": "Analyze project structure and extract components, relationships, and boundaries.\n\n## Project\n- Name: {project}\n- Path: {project_path}\n\n## File Inventory\n{categorized file list with tiers}\n\n## Output Path\n/tmp/vault-context-structure-{project}.md"
+    },
+    {
+      "agent": "knowledge-extractor",
+      "task": "Extract knowledge objects from project documentation.\n\n## Project\n- Name: {project}\n- Path: {project_path}\n\n## Files to Read\n### Tier 1 (High Priority)\n{tier_1_files}\n\n### Tier 2 (Medium Priority)\n{tier_2_files}\n\n## Output Path\n/tmp/vault-context-knowledge-{project}.md"
+    },
+    {
+      "agent": "codebase-scanner",
+      "task": "Scan source code to discover modules, workflows, entry points, and data flows.\n\n## Project\n- Name: {project}\n- Path: {project_path}\n- Primary language: {detected_language}\n- Source directories: {src_dirs}\n\n## Output Path\n/tmp/vault-context-codebase-{project}.md"
+    }
+  ],
+  "mode": "spawn"
 }
 ```
 
+Wait for all three to complete. Verify each output file exists:
+
+```bash
+test -f /tmp/vault-context-structure-{project}.md && echo "✓ structure" || echo "✗ structure MISSING"
+test -f /tmp/vault-context-knowledge-{project}.md && echo "✓ knowledge" || echo "✗ knowledge MISSING"
+test -f /tmp/vault-context-codebase-{project}.md && echo "✓ codebase" || echo "✗ codebase MISSING"
+```
+
+If any subagent failed, log the gap and continue with what succeeded. Never halt the pipeline for a single subagent failure.
+
 ---
 
-## Phase 3: Classify Extractions
+## Phase 3: Merge & Classify (In-Skill — Sequential)
 
-Categorize each extraction by content type and assign confidence.
+Read all three output files and merge into a unified extraction list.
 
-### Content Type Rules
+### 3a. Read Subagent Outputs
 
-| Type | Signals | Common Sources |
-|------|---------|----------------|
-| `decision` | decided, chose, selected, approach, trade-off, "use X for Y" | README, DESIGN, BMAD PRDs |
-| `lesson` | learned, realized, discovered, mistake, gotcha | Docs, changelogs |
-| `idea` | idea, proposal, "what if", "could we", explore | Brainstorms, roadmap |
-| `todo` | todo, task, "need to", "should", fix, implement | TODO.md, specs |
-| `pattern` | pattern, recurring, always, convention, standard | Docs, conventions files |
+```bash
+cat /tmp/vault-context-structure-{project}.md
+cat /tmp/vault-context-knowledge-{project}.md
+cat /tmp/vault-context-codebase-{project}.md
+```
 
-**Ambiguous cases:** Prefer `decision` > `lesson`, `todo` > `idea`, `lesson` > `idea`. Default to `lesson` if unclassifiable.
+### 3b. Transform Structure Analysis → Vault Entries
 
-### Confidence Assignment
+The structure-analyzer produces components and relationships. Transform these into vault entries:
 
-| Source Category | Default Confidence |
-|----------------|-------------------|
-| `readme`, `design`, `bmad` | `high` |
-| `planning`, `documentation`, `specs` | `medium` |
-| `config`, `package`, `infra` | `low` |
+**Components → `pattern` entries:**
+Each significant component (not every file, but each architectural unit) becomes a pattern entry:
+```
+Type: pattern
+Content: "{Component Name} — {role}. Located at {location}. {what it exposes}. {what it depends on}."
+Confidence: high (from structural analysis)
+Tags: [architecture, component, {component-type}]
+```
 
-Adjust up if content includes explicit rationale. Adjust down if vague or potentially outdated.
+**Relationships → `pattern` entries:**
+Group related relationships into coherent pattern entries:
+```
+Type: pattern
+Content: "The {system/subsystem} uses a {pattern name} pattern: {A} → {B} → {C}. {A} {relationship} {B}, which {relationship} {C}. (Source: structural analysis)"
+Confidence: high
+Tags: [architecture, data-flow|dependency|orchestration]
+```
 
-### Cross-Project Detection
+**Boundaries → `pattern` entries:**
+```
+Type: pattern
+Content: "System boundary: {description of what's internal vs external, layers if present}. (Source: structural analysis)"
+Confidence: medium
+Tags: [architecture, boundary]
+```
 
-Flag as global (`_global/`) if:
-- Content applies across multiple projects
-- Content explicitly mentions being general/universal
-- Type is `pattern` (patterns are cross-project by default)
+### 3c. Transform Codebase Analysis → Vault Entries
 
-### Apply Confidence Threshold
+**Workflows/Pipelines → `pattern` entries:**
+```
+Type: pattern
+Content: "{Workflow name}: {step-by-step description with file references}. (Source: codebase scan)"
+Confidence: medium
+Tags: [workflow, {relevant-tags}]
+```
+
+**State Machines → `pattern` entries:**
+```
+Type: pattern
+Content: "{Entity} lifecycle: states [{list}], transitions [{from → to triggered by action}]. (Source: codebase scan)"
+Confidence: medium
+Tags: [state-machine, lifecycle]
+```
+
+**API Surface → `pattern` entries:**
+```
+Type: pattern
+Content: "API surface: {list of endpoints/commands with descriptions}. (Source: codebase scan)"
+Confidence: medium
+Tags: [api, interface]
+```
+
+**Undocumented discoveries → `lesson` entries:**
+```
+Type: lesson
+Content: "{description of code-doc divergence}. (Source: codebase scan)"
+Confidence: medium
+Tags: [code-doc-gap, {relevant-tags}]
+```
+
+### 3d. Knowledge Extractions → Direct Pass-Through
+
+The knowledge-extractor already produces classified entries. Pass them through with minimal transformation — they already have type, confidence, and source attribution.
+
+### 3e. Cross-Source Dedup
+
+The same knowledge may appear in multiple subagent outputs (structure-analyzer finds a component, knowledge-extractor reads about it in README). Deduplicate:
+
+- **Same entity, different detail levels** → keep the richer version, merge source attribution
+- **Same decision from docs and code** → keep the docs version (has rationale), add code confirmation
+- **Structural pattern also described in README** → merge into one, cite both sources
+
+### 3f. Apply Confidence Threshold
 
 Drop extractions below the `confidence_threshold`. Default is `low` (include everything).
 
+### 3g. Order for Writing
+
+1. High confidence first
+2. Patterns before other types (structural knowledge first — it provides context for everything else)
+3. Decisions next (architectural choices)
+4. Lessons, ideas, todos last
+5. Last item should be low-risk (triggers the git commit)
+
 ---
 
-## Phase 4: Structure for Vault Update
+## Phase 4: Feed Through Vault Update
 
-Transform each classified extraction into a structured object:
+For each merged extraction, invoke the vault-update skill logic:
 
+1. **Dedup check** — search vault for similar content via `obsidian vault="<vault>" search query="..." format=json`
+2. **Classify & tag** — refine type, generate 2-5 kebab-case tags, determine target location
+3. **Write** — build frontmatter (base + type-specific), write via `obsidian vault="<vault>" create ... overwrite silent`
+4. **Validate** — read back and verify schema compliance, auto-fix issues
+5. **Index** — regenerate project index and master index
+6. **Commit** — git add + commit (only on the last extraction)
+
+Each extraction becomes:
 ```yaml
 content: "{polished, self-contained text}"
 project: "{project}"
@@ -163,40 +258,13 @@ skip_proposals: false
 skip_commit: true  # true for all except the last extraction
 ```
 
-### Content Polishing
-
-- Remove documentation boilerplate
-- Make self-contained (add context implied by the source file)
-- Clean, direct prose: 2-6 sentences for most, shorter for todos
-- Include source attribution: `(Source: README.md)`
-
-### Processing Order
-
-1. High confidence first
-2. Decisions before other types
-3. Global items grouped together
-4. Last item should be low-risk (triggers the commit)
-
----
-
-## Phase 5: Feed Through Vault Update
-
-For each structured extraction, invoke the vault-update skill logic:
-
-1. **Dedup check** — search vault for similar content via `obsidian vault="<vault>" search query="..." format=json`
-2. **Classify & tag** — refine type, generate 2-5 kebab-case tags, determine target location
-3. **Write** — build frontmatter (base + type-specific), write via `obsidian vault="<vault>" create ... overwrite silent`
-4. **Validate** — read back and verify schema compliance, auto-fix issues
-5. **Index** — regenerate project index and master index
-6. **Commit** — git add + commit (only on the last extraction)
-
 Track outcomes per extraction: `written`, `deduped`, `proposed`, `failed`.
 
 Continue on individual failures — don't halt the pipeline.
 
 ---
 
-## Phase 6: Summary Report
+## Phase 5: Summary Report
 
 ```
 📊 Context Initialization Complete
@@ -206,23 +274,41 @@ Project: {project}
 Path: {project_path}
 Vault: {vault_path}
 
-Scan Results:
-  files discovered: {count}
-  files read: {count}
+Discovery:
+  files found:          {count}
+  source dirs found:    {count}
 
-Extraction Results:
-  raw extractions: {raw_count}
-  after dedup/filtering: {classified_count}
+Subagent Results:
+  structure-analyzer:   {✓ complete | ✗ failed}
+    components:         {count}
+    relationships:      {count}
+  knowledge-extractor:  {✓ complete | ✗ failed}
+    raw extractions:    {count}
+  codebase-scanner:     {✓ complete | ✗ failed}
+    entry points:       {count}
+    workflows:          {count}
+    state machines:     {count}
+
+Merge Results:
+  total extractions:    {count}
+  after dedup:          {count}
+  by type:
+    patterns:           {count}  (structural + conventions)
+    decisions:          {count}
+    lessons:            {count}
+    ideas:              {count}
+    todos:              {count}
 
 Vault Results:
-  ✅ Written: {written_count}
-  🔄 Deduped: {deduped_count}
-  📋 Proposed: {proposed_count}
-  ❌ Failed: {failed_count}
+  ✅ Written:           {count}
+  🔄 Deduped:          {count}
+  📋 Proposed:         {count}
+  ❌ Failed:           {count}
 
 Written entries:
   - {vault_path_1}
   - {vault_path_2}
+  ...
 
 ═══════════════════════════════════
 ```
@@ -231,12 +317,21 @@ Written entries:
 
 - If proposals created: "Run vault-review to approve or reject proposals."
 - If todos extracted: "Check the vault Kanban view to prioritize new todos."
+- For diagrams: "The vault now has structural context. Run vault-diagram to visualize."
 - General: "The project is now onboarded. The vault will grow as you work."
+
+---
 
 ## Rules
 
-- ALWAYS scan before reading — don't read every file blindly
-- ALWAYS extract selectively — not every sentence is vault-worthy
-- ALWAYS go through vault-update for writes — never write directly
+- ALWAYS run discovery before spawning subagents — they need the file inventory
+- ALWAYS spawn all three subagents in parallel — don't serialize what can be concurrent
+- ALWAYS continue the pipeline if one subagent fails — partial results are better than none
+- ALWAYS transform structural/codebase findings into typed vault entries (pattern, lesson, etc.)
+- ALWAYS cross-source dedup before writing — the same knowledge often appears in docs AND code
+- ALWAYS go through vault-update for writes — never write vault entries directly
+- ALWAYS prioritize patterns first in write order — structural context helps everything else
 - NEVER halt the pipeline for individual write failures
+- NEVER skip the merge phase — raw subagent output is not vault-ready
+- NEVER read source files directly in this skill — that's the subagents' job
 - ALWAYS output the summary report at the end
