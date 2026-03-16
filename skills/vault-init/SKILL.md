@@ -84,7 +84,7 @@ Content for vault-rules.md — a condensed quick-reference covering:
 - **Flat structure:** Use frontmatter (type/project/tags) for organization, not deep nesting
 - **File naming:** kebab-case, no dates in filenames (dates live in frontmatter ID)
 - **Frontmatter requirements:** All entries need base fields (id, type, project, status, created, confidence, tags, related, source-session) plus type-specific extensions
-- **Entry types:** decision, lesson, idea, todo, pattern — each has specific extension fields
+- **Entry types:** decision, lesson, idea, todo, pattern, component, workflow, architecture — each has specific extension fields
 - **Trust routing:** High confidence → direct write to project folder. Low confidence → `_proposals/` for review
 - **Git commit format:** `vault: {action} - {summary}` (actions: add, update, flag, index, batch)
 - **Base files:** `.base` files are Obsidian UI views querying frontmatter dynamically — they don't need updating when entries are added
@@ -113,6 +113,12 @@ last-updated: <YYYY-MM-DD>
 entry-count: 0
 ---
 # {project_display_name} — Vault Index
+
+## Architecture (0)
+
+## Components (0)
+
+## Workflows (0)
 
 ## Decisions (0)
 

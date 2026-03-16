@@ -14,7 +14,10 @@ vault/
 ├── _global/                         # Cross-project knowledge
 │   ├── lessons/
 │   ├── ideas/
-│   └── patterns/
+│   ├── patterns/
+│   ├── components/
+│   ├── workflows/
+│   └── architecture/
 ├── _system/                         # Vault metadata
 │   ├── _master-index.md
 │   ├── vault-rules.md
@@ -41,7 +44,7 @@ Examples: `use-mcp-vault-for-writes.md`, `setup-git-hooks.md`, `always-check-ded
 
 ```yaml
 id: "{type}-{project}-{short-slug}-{YYYYMMDD}"
-type: decision|lesson|idea|todo|pattern
+type: decision|lesson|idea|todo|pattern|component|workflow|architecture
 project: "{project-name}"
 status: active|archived|superseded
 created: "YYYY-MM-DD"
@@ -60,12 +63,15 @@ source-session: "{session-id}"
 | **Idea** | `feasibility: ""`, `impact: ""` |
 | **Todo** | `priority: medium`, `assignee: ""`, `due: ""`, `stage: backlog`, `effort: ""` |
 | **Pattern** | `occurrences: 1`, `first-seen: "YYYY-MM-DD"`, `last-seen: "YYYY-MM-DD"` |
+| **Component** | `component-type: extension\|skill\|subagent\|data\|service`, `location: ""` |
+| **Workflow** | `trigger: ""`, `participants: []` |
+| **Architecture** | `scope: system\|subsystem\|boundary\|api` |
 
 ## Trust Routing
 
 | Direct Write (low risk) | Proposal Queue (high stakes) |
 |-------------------------|------------------------------|
-| lesson, todo, idea | decision, pattern |
+| lesson, todo, idea, component, workflow, architecture | decision, pattern |
 
 High-stakes types go to `_proposals/` unless `skip_proposals: true`.
 
@@ -93,6 +99,15 @@ entry-count: N
 
 # {Project Name} — Vault Index
 
+## Architecture (N)
+- [[vault-folder-boundaries]] — vault folder structure and access boundaries
+
+## Components (N)
+- [[mcp-vault-skill]] — MCP-Vault skill for vault writes
+
+## Workflows (N)
+- [[session-scan-pipeline]] — end-of-session scan and extraction flow
+
 ## Decisions (N)
 - [[use-mcp-vault-for-writes]] — chose MCP-Vault as primary write interface
 
@@ -104,6 +119,9 @@ entry-count: N
 
 ## Ideas (N)
 - [[auto-tag-by-content]] — auto-generate tags from content analysis
+
+## Patterns (N)
+- [[always-validate-before-write]] — recurring validation-first pattern across skills
 ```
 
 ### Master Index (`_master-index.md`)
@@ -123,6 +141,9 @@ total-entries: N
 ## Global Knowledge
 - **Lessons:** N entries
 - **Patterns:** N entries
+- **Components:** N entries
+- **Workflows:** N entries
+- **Architecture:** N entries
 ```
 
 ## Diagrams

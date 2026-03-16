@@ -22,8 +22,26 @@ Pure orchestrator. Spawns vault-scout for reconnaissance, then three specialized
 | `vault_name` | No | `tpcw-vault` | Obsidian vault name |
 | `scan_depth` | No | `3` | How deep to recurse for discovery |
 | `confidence_threshold` | No | `low` | Minimum confidence to include |
+| `fresh` | No | `false` | Delete all existing project entries before running (clean slate) |
 
 If `project` is missing, ask for it. Validate it's kebab-case.
+
+---
+
+## Phase 0: Clean Slate (only if `fresh: true`)
+
+Delete all existing entries for this project, preserving the project index (which gets rebuilt in Phase 4 anyway).
+
+```bash
+obsidian vault="{vault_name}" eval code="
+  const files = app.vault.getMarkdownFiles()
+    .filter(f => f.path.startsWith('projects/{project}/') && !f.path.includes('_project-index'));
+  for (const f of files) { await app.vault.trash(f, true); }
+  JSON.stringify({ deleted: files.length, files: files.map(f => f.basename) });
+"
+```
+
+Log the count and proceed. If eval fails, halt — the user asked for fresh and we shouldn't write on top of stale data.
 
 ---
 
@@ -125,56 +143,65 @@ cat /tmp/vault-context-codebase-{project}.md
 
 ### 3b. Transform Structure Analysis → Vault Entries
 
-**Components → `pattern` entries:**
-Each significant component becomes a pattern entry:
+**Components → `component` entries:**
+Each significant component becomes a component entry:
 ```
-Type: pattern
+Type: component
 Content: "{Component Name} — {role}. Located at {location}. Exposes: {what}. Depends on: {what}."
 Confidence: high
-Tags: [architecture, component, {component-type}]
+Tags: [{component-type}, {relevant-tags}]
+component-type: extension|skill|subagent|data|service
+location: "{path}"
 ```
 
-**Relationships → `pattern` entries:**
+**Relationships → `architecture` entries:**
 Group related relationships into coherent entries:
 ```
-Type: pattern
+Type: architecture
 Content: "The {system/subsystem} uses a {pattern name}: {A} → {B} → {C}. {description of flow}. (Source: structural analysis)"
 Confidence: high
-Tags: [architecture, data-flow|dependency|orchestration]
+Tags: [data-flow|dependency|orchestration]
+scope: subsystem
 ```
 
-**Boundaries → `pattern` entries:**
+**Boundaries → `architecture` entries:**
 ```
-Type: pattern
+Type: architecture
 Content: "System boundary: {internal vs external, layers}. (Source: structural analysis)"
 Confidence: medium
-Tags: [architecture, boundary]
+Tags: [boundary]
+scope: boundary
 ```
 
 ### 3c. Transform Codebase Analysis → Vault Entries
 
-**Workflows/Pipelines → `pattern` entries:**
+**Workflows/Pipelines → `workflow` entries:**
 ```
-Type: pattern
+Type: workflow
 Content: "{Workflow name}: {step-by-step with file references}. (Source: codebase scan)"
 Confidence: medium
-Tags: [workflow, {relevant-tags}]
+Tags: [{relevant-tags}]
+trigger: "{what initiates this workflow}"
+participants: ["{components involved}"]
 ```
 
-**State Machines → `pattern` entries:**
+**State Machines → `workflow` entries:**
 ```
-Type: pattern
+Type: workflow
 Content: "{Entity} lifecycle: states [{list}], transitions [{from → to}]. (Source: codebase scan)"
 Confidence: medium
 Tags: [state-machine, lifecycle]
+trigger: "{state change trigger}"
+participants: ["{components involved}"]
 ```
 
-**API Surface → `pattern` entries:**
+**API Surface → `architecture` entries:**
 ```
-Type: pattern
+Type: architecture
 Content: "API surface: {endpoints/commands}. (Source: codebase scan)"
 Confidence: medium
 Tags: [api, interface]
+scope: api
 ```
 
 **Undocumented discoveries → `lesson` entries:**
@@ -210,10 +237,13 @@ Drop extractions below `confidence_threshold`. Default is `low` (include everyth
 ### 3h. Order for Writing
 
 1. High confidence first
-2. Patterns first (structural context helps everything downstream)
-3. Decisions next (architectural choices)
-4. Lessons, ideas, todos last
-5. Last item should be low-risk (triggers git commit)
+2. Architecture first (structural context helps everything downstream)
+3. Components next (depend on architecture context)
+4. Workflows next (reference components)
+5. Decisions next (architectural choices)
+6. Patterns next (conventions and recurring solutions)
+7. Lessons, ideas, todos last
+8. Last item should be low-risk (triggers git commit)
 
 ---
 
@@ -233,7 +263,7 @@ Each extraction becomes:
 content: "{polished, self-contained text}"
 project: "{project}"
 source-session: "context-init-{project}-{YYYY-MM-DD}"
-type: "{decision|lesson|idea|todo|pattern}"
+type: "{decision|lesson|idea|todo|pattern|component|workflow|architecture}"
 confidence: "{high|medium|low}"
 skip_proposals: false
 skip_commit: true  # true for all except the last
@@ -280,7 +310,10 @@ Merge Results:
   deduped (vs vault):     {count}
   after dedup:            {count}
   by type:
-    patterns:             {count}  (structural + conventions)
+    architecture:         {count}  (boundaries, subsystems, APIs)
+    components:           {count}  (project components)
+    workflows:            {count}  (pipelines, state machines)
+    patterns:             {count}  (conventions + recurring solutions)
     decisions:            {count}
     lessons:              {count}
     ideas:                {count}
@@ -340,7 +373,7 @@ vault-context (orchestrator — does no file I/O)
 - ALWAYS dedup against existing vault entries (from vault-scout report) before writing
 - ALWAYS cross-source dedup before writing — same knowledge from docs AND code
 - ALWAYS go through vault-update for writes — never write vault entries directly
-- ALWAYS prioritize patterns first — structural context helps everything downstream
+- ALWAYS prioritize architecture first, then components, then workflows — structural context helps everything downstream
 - NEVER halt the pipeline for individual write failures
 - NEVER read source files in this skill — that's the subagents' job
 - NEVER skip the merge phase — raw subagent output is not vault-ready

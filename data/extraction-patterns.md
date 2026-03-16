@@ -2,7 +2,7 @@
 
 ## What to Extract
 
-Project artifacts contain knowledge embedded in documentation, specs, and config. Your job is to find decisions, lessons, ideas, todos, and patterns — not to re-document the project.
+Project artifacts contain knowledge embedded in documentation, specs, and config. Your job is to find decisions, lessons, ideas, todos, patterns, components, workflows, and architecture — not to re-document the project.
 
 ### README / Design Docs
 
@@ -61,6 +61,9 @@ Look for:
 | `idea` | idea, proposal, "what if", "could we", explore | Brainstorms, roadmap |
 | `todo` | todo, task, "need to", "should", fix, implement | TODO.md, specs |
 | `pattern` | pattern, recurring, always, convention, standard | Docs, conventions |
+| `component` | component, module, service, extension, skill, plugin | Source code, configs |
+| `workflow` | workflow, pipeline, process, state machine, lifecycle, data flow | Source code, specs |
+| `architecture` | architecture, boundary, layer, API surface, module graph, system design | README, design docs |
 
 ## Confidence Assignment
 

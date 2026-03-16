@@ -37,7 +37,7 @@ The centralized write layer for the vault. Nothing gets written without going th
 | `skip_commit` | `false` | Skip git commit (for batch ops) |
 | `force_write` | `false` | Skip dedup check |
 
-Validate `type` is one of: decision, lesson, idea, todo, pattern. Invalid → set to null.
+Validate `type` is one of: decision, lesson, idea, todo, pattern, component, workflow, architecture. Invalid → set to null.
 Validate `confidence` is one of: high, medium, low, unknown. Invalid → default to unknown.
 
 If any required field is missing, halt with error.
@@ -80,6 +80,9 @@ For each result:
 | `idea` | idea, proposal, what if, could, might, explore |
 | `todo` | todo, task, need to, should, must, fix, implement |
 | `pattern` | pattern, recurring, every time, always, common approach |
+| `component` | component, extension, skill, subagent, service, module, plugin |
+| `workflow` | workflow, pipeline, process, state machine, lifecycle, data flow |
+| `architecture` | architecture, boundary, layer, API surface, module graph, system design |
 
 ### Generate Tags
 
@@ -90,10 +93,13 @@ For each result:
 **Project vs Global:**
 - Content applies across projects → `_global/`
 - Type is `pattern` → `_global/patterns/` (default)
+- Type is `component` or `workflow` → `projects/{project}/` (always project-scoped)
+- Type is `architecture` → `projects/{project}/` or `_global/` (project-scoped by default; use `_global/` when it spans projects)
 - Otherwise → `projects/{project}/`
 
 **Direct Write vs Proposals:**
 - High-stakes types (`decision`, `pattern`) AND `skip_proposals` is false → `_proposals/`
+- `component`, `workflow`, `architecture` → always direct write (never proposals)
 - Everything else → direct write to target path
 
 ### Generate File Slug
@@ -130,6 +136,9 @@ Type-specific extensions:
 | **Idea** | `feasibility: ""`, `impact: ""` |
 | **Todo** | `priority: medium`, `assignee: ""`, `due: ""`, `stage: backlog`, `effort: ""` |
 | **Pattern** | `occurrences: 1`, `first-seen: "{date}"`, `last-seen: "{date}"` |
+| **Component** | `component-type: extension\|skill\|subagent\|data\|service`, `location: ""` |
+| **Workflow** | `trigger: ""`, `participants: []` |
+| **Architecture** | `scope: system\|subsystem\|boundary\|api` |
 
 Add `dedup_flagged: true` and `dedup_similar_to: "{path}"` if flagged.
 Add `target_folder: "{path}"` if routing to proposals.
@@ -268,7 +277,7 @@ git diff --cached --quiet || git commit -m "vault: update - {summary}: {slug}"
 **ID format:** `{type}-{project}-{short-slug}-{YYYYMMDD}`
 
 **Enum values:**
-- type: decision, lesson, idea, todo, pattern
+- type: decision, lesson, idea, todo, pattern, component, workflow, architecture
 - status: active, archived, superseded
 - confidence: high, medium, low, unknown
 - stage (todo): backlog, in-progress, review, done
