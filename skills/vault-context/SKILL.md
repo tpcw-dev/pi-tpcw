@@ -183,9 +183,9 @@ skip_commit: true  # true for all except the last extraction
 
 For each structured extraction, invoke the vault-update skill logic:
 
-1. **Dedup check** — search vault for similar content via `vault_search_notes`
+1. **Dedup check** — search vault for similar content via `obsidian vault="<vault>" search query="..." format=json`
 2. **Classify & tag** — refine type, generate 2-5 kebab-case tags, determine target location
-3. **Write** — build frontmatter (base + type-specific), write via `vault_write_note`
+3. **Write** — build frontmatter (base + type-specific), write via `obsidian vault="<vault>" create ... overwrite silent`
 4. **Validate** — read back and verify schema compliance, auto-fix issues
 5. **Index** — regenerate project index and master index
 6. **Commit** — git add + commit (only on the last extraction)

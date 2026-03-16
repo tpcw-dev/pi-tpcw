@@ -47,8 +47,8 @@ If any required field is missing, halt with error.
 If `force_write` is true, skip this step.
 
 Search vault for similar content:
-```
-mcp({ tool: "vault_search_notes", args: '{"query": "<key phrases from content>", "searchContent": true, "searchFrontmatter": true, "limit": 5}' })
+```bash
+obsidian vault="<vault>" search query="<key phrases from content>" format=json 2>/dev/null
 ```
 
 Search within `projects/{project}/`.
@@ -83,7 +83,7 @@ For each result:
 
 ### Generate Tags
 
-2-5 kebab-case tags. Be specific (prefer `mcp-vault` over `tools`). Don't include the type as a tag.
+2-5 kebab-case tags. Be specific (prefer `obsidian-cli` over `tools`). Don't include the type as a tag.
 
 ### Determine Target Location
 
@@ -134,10 +134,13 @@ Type-specific extensions:
 Add `dedup_flagged: true` and `dedup_similar_to: "{path}"` if flagged.
 Add `target_folder: "{path}"` if routing to proposals.
 
-### Write via MCP-Vault
+### Write via Obsidian CLI
 
-```
-mcp({ tool: "vault_write_note", args: '{"path": "{target}/{slug}.md", "content": "{body}", "frontmatter": {frontmatter}, "mode": "overwrite"}' })
+```bash
+obsidian vault="<vault>" create path="{target}/{slug}.md" content="---
+{frontmatter_as_yaml}
+---
+{body}" overwrite silent 2>/dev/null
 ```
 
 ## Step 5: Validate
@@ -149,15 +152,15 @@ Read back the written file and verify:
 3. **Enum validation** — type, status, confidence, stage, priority, effort, feasibility, impact
 4. **Content body** — starts with `# Title` heading, non-empty
 
-Auto-fix any issues via `vault_update_frontmatter` with merge. Halt only on unfixable errors.
+Auto-fix any issues via `obsidian vault="<vault>" property:set`. Halt only on unfixable errors.
 
 ## Step 6: Regenerate Indexes
 
 **Project index** (`projects/{project}/_project-index.md`):
-1. `vault_list_directory` → scan project folder
-2. `vault_get_frontmatter` → get metadata for each entry
+1. `obsidian vault="<vault>" files folder="projects/{project}/"` → scan project folder
+2. `obsidian vault="<vault>" properties path="..." format=json` → get metadata for each entry
 3. Rebuild index grouped by type with wikilinks and descriptions
-4. Write with `vault_write_note` mode overwrite
+4. Write with `obsidian vault="<vault>" create ... overwrite silent`
 
 **Master index** (`_system/_master-index.md`):
 1. Scan `projects/` for all project folders
@@ -215,14 +218,14 @@ Git failure → log warning, continue (content is already written).
 | `source-session` | null | Session identifier |
 | `skip_commit` | false | Skip git commit |
 
-Load entry via `vault_read_note`. If not found, halt. Identify type and validate requested update fields against the type's schema.
+Load entry via `obsidian vault="<vault>" read path="..."`. If not found, halt. Identify type and validate requested update fields against the type's schema.
 
 ## Step 2: Apply Edits
 
-Use `vault_update_frontmatter` with `merge: true`. Automatically add `last-modified: "{YYYY-MM-DD}"`.
+Use `obsidian vault="<vault>" property:set path="..." name="..." value="..."`. Automatically add `last-modified: "{YYYY-MM-DD}"`.
 
-For tag changes: `vault_manage_tags` with `operation: "add"` or `"remove"`.
-For content body changes: `vault_patch_note` with oldString/newString.
+For tag changes: `obsidian vault="<vault>" property:set path="..." name="tags" value="..." type=list`.
+For content body changes: read via `obsidian vault="<vault>" read`, then write back with `obsidian vault="<vault>" create ... overwrite silent`.
 
 Preserve all fields not included in updates.
 
@@ -284,7 +287,7 @@ git diff --cached --quiet || git commit -m "vault: update - {summary}: {slug}"
 
 - ALWAYS validate inputs before processing
 - ALWAYS check for duplicates before writing (unless force_write)
-- ALWAYS use MCP-Vault tools for all vault file operations
+- ALWAYS use Obsidian CLI commands for all vault file operations
 - ALWAYS rebuild indexes from current state (never incremental patches)
 - ALWAYS include complete frontmatter (base + type extensions)
 - NEVER write without a unique ID

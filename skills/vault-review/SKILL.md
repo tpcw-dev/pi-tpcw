@@ -26,16 +26,16 @@ Review proposals pending in `_proposals/`, present them for interactive approve/
 
 Scan `_proposals/` for pending items:
 
-```
-mcp({ tool: "vault_list_directory", args: '{"path": "_proposals/"}' })
+```bash
+obsidian vault="<vault>" files folder="_proposals/" 2>/dev/null
 ```
 
 Collect all `.md` files. Exclude `_archived/` subdirectory, non-markdown files, and index files.
 
 For each proposal, read frontmatter and content:
 
-```
-mcp({ tool: "vault_read_note", args: '{"path": "_proposals/{filename}"}' })
+```bash
+obsidian vault="<vault>" read path="_proposals/{filename}" 2>/dev/null
 ```
 
 Extract: path, title, type, confidence, project, source-session, target_folder, created, tags, content.
@@ -69,7 +69,7 @@ Display a scannable summary:
 
 #  | Type      | Confidence | Project    | Preview                          | Flags
 ---|-----------|------------|------------|----------------------------------|------
-1  | decision  | high       | tpcw-build | "Use MCP-Vault as single write…" |
+1  | decision  | high       | tpcw-build | "Use Obsidian CLI as single write…" |
 2  | todo      | medium     | tpcw-build | "Implement session scanner fo…"  | ⚠️ incomplete
 ...
 
@@ -142,8 +142,8 @@ force_write: false
 | `failed` | Error during processing |
 
 After successful write or dedup, delete the original proposal from `_proposals/`:
-```
-mcp({ tool: "vault_delete_note", args: '{"path": "_proposals/{filename}"}' })
+```bash
+obsidian vault="<vault>" delete path="_proposals/{filename}" 2>/dev/null
 ```
 
 Failed proposals stay in `_proposals/` for retry.
@@ -159,13 +159,15 @@ Move each rejected proposal to `_proposals/_archived/` with rejection metadata.
 ### For Each Rejection
 
 1. Update frontmatter with rejection metadata:
-```
-mcp({ tool: "vault_update_frontmatter", args: '{"path": "_proposals/{filename}", "frontmatter": {"status": "rejected", "rejection_reason": "{reason}", "rejected_date": "{YYYY-MM-DD}"}}' })
+```bash
+obsidian vault="<vault>" property:set path="_proposals/{filename}" name="status" value="rejected" 2>/dev/null
+obsidian vault="<vault>" property:set path="_proposals/{filename}" name="rejection_reason" value="{reason}" 2>/dev/null
+obsidian vault="<vault>" property:set path="_proposals/{filename}" name="rejected_date" value="{YYYY-MM-DD}" 2>/dev/null
 ```
 
 2. Move to archive:
-```
-mcp({ tool: "vault_move_note", args: '{"path": "_proposals/{filename}", "newPath": "_proposals/_archived/{filename}"}' })
+```bash
+obsidian vault="<vault>" move path="_proposals/{filename}" to="_proposals/_archived/{filename}" 2>/dev/null
 ```
 
 **Never delete** rejected proposals — archive preserves decision history.

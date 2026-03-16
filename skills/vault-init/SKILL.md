@@ -69,10 +69,14 @@ Verify all expected directories exist before proceeding.
 
 > **Add Project mode:** Skip this phase entirely — system files already exist.
 
-### 2a. Write vault-rules.md via MCP-Vault
+### 2a. Write vault-rules.md via Obsidian CLI
 
-```
-mcp({ tool: "vault_write_note", args: '{"path": "_system/vault-rules.md", "content": "<content>", "frontmatter": {"description": "Core vault rules and conventions", "last-updated": "<YYYY-MM-DD>"}, "mode": "overwrite"}' })
+```bash
+obsidian vault="{vault_name}" create path="_system/vault-rules.md" content="---
+description: Core vault rules and conventions
+last-updated: <YYYY-MM-DD>
+---
+<content>" overwrite silent 2>/dev/null
 ```
 
 Content for vault-rules.md — a condensed quick-reference covering:
@@ -89,7 +93,7 @@ Content for vault-rules.md — a condensed quick-reference covering:
 
 ### 2b. Write .gitignore via filesystem
 
-Write `{vault_path}/.gitignore` via bash or Write tool (NOT MCP-Vault):
+Write `{vault_path}/.gitignore` via bash or Write tool (NOT Obsidian CLI):
 
 ```
 .obsidian/
@@ -100,10 +104,25 @@ Write `{vault_path}/.gitignore` via bash or Write tool (NOT MCP-Vault):
 
 ## Phase 3: Create Project Index (Both Modes)
 
-Write `projects/{project}/_project-index.md` via MCP-Vault:
+Write `projects/{project}/_project-index.md` via Obsidian CLI:
 
-```
-mcp({ tool: "vault_write_note", args: '{"path": "projects/{project}/_project-index.md", "content": "# {project_display_name} — Vault Index\n\n## Decisions (0)\n\n## Lessons (0)\n\n## Todos (0)\n\n## Ideas (0)\n\n## Patterns (0)", "frontmatter": {"project": "{project}", "last-updated": "<YYYY-MM-DD>", "entry-count": 0}, "mode": "overwrite"}' })
+```bash
+obsidian vault="{vault_name}" create path="projects/{project}/_project-index.md" content="---
+project: {project}
+last-updated: <YYYY-MM-DD>
+entry-count: 0
+---
+# {project_display_name} — Vault Index
+
+## Decisions (0)
+
+## Lessons (0)
+
+## Todos (0)
+
+## Ideas (0)
+
+## Patterns (0)" overwrite silent 2>/dev/null
 ```
 
 The index starts empty. It is maintained by vault-update as entries are added.
@@ -112,7 +131,7 @@ The index starts empty. It is maintained by vault-update as entries are added.
 
 ## Phase 4: Create Obsidian Base Files
 
-> ⚠️ **Base files are YAML, not markdown.** Write them via filesystem tools (Write tool or `cat >`), NEVER via MCP-Vault.
+> ⚠️ **Base files are YAML, not markdown.** Write them via filesystem tools (Write tool or `cat >`), NEVER via Obsidian CLI.
 
 ### Full Init — create all three base files:
 
@@ -278,17 +297,28 @@ Verify all created `.base` files exist and are non-empty.
 
 ### Full Init — create master index from scratch:
 
-```
-mcp({ tool: "vault_write_note", args: '{"path": "_system/_master-index.md", "content": "# Vault Master Index\n\n## Projects\n- [[projects/{project}/_project-index|{project}]] — 0 entries\n\n## Global Knowledge\n- 0 entries", "frontmatter": {"last-updated": "<YYYY-MM-DD>", "project-count": 1, "total-entries": 0}, "mode": "overwrite"}' })
+```bash
+obsidian vault="{vault_name}" create path="_system/_master-index.md" content="---
+last-updated: <YYYY-MM-DD>
+project-count: 1
+total-entries: 0
+---
+# Vault Master Index
+
+## Projects
+- [[projects/{project}/_project-index|{project}]] — 0 entries
+
+## Global Knowledge
+- 0 entries" overwrite silent 2>/dev/null
 ```
 
 ### Add Project — update existing master index:
 
-1. Read the existing master index via `vault_read_note` / `vault_get_frontmatter`
+1. Read the existing master index via `obsidian vault="{vault_name}" read` / `obsidian vault="{vault_name}" properties ... format=json`
 2. Update frontmatter: increment `project-count`, update `last-updated`
 3. Append new project line under `## Projects`: `- [[projects/{project}/_project-index|{project}]] — 0 entries`
 4. Preserve all existing content
-5. Write back via `vault_write_note` with `mode: "overwrite"`
+5. Write back via `obsidian vault="{vault_name}" create ... overwrite silent`
 
 ---
 
@@ -372,7 +402,7 @@ Output a final report confirming everything created.
 ## Rules
 
 - ALWAYS detect mode from vault state — never ask the user which mode
-- ALWAYS use MCP-Vault tools for `.md` files, filesystem tools for `.base` and `.gitignore`
+- ALWAYS use Obsidian CLI for `.md` files, filesystem tools for `.base` and `.gitignore`
 - ALWAYS validate project name is kebab-case before proceeding
 - NEVER overwrite existing system files in Add Project mode
 - NEVER fail the pipeline on git errors — files are already safe

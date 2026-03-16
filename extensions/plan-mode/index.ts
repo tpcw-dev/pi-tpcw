@@ -259,7 +259,11 @@ ${docs.designDocContent}
 ${docs.todoContent}
 \`\`\`
 
-Use the vault_write_note MCP tool for each. After writing both, confirm the paths and suggest picking up the todo in a fresh session.`,
+Use the Obsidian CLI to write each:
+\`\`\`bash
+obsidian vault="${vaultName}" create path="<path>" content="<content>" overwrite silent 2>/dev/null
+\`\`\`
+After writing both, confirm the paths and suggest picking up the todo in a fresh session.`,
 				{ deliverAs: "followUp" },
 			);
 

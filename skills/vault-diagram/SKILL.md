@@ -30,10 +30,10 @@ For non-vault diagrams, use `draw-diagram` directly.
 
 ### Step 1: Gather Vault Context
 
-Query the vault for relevant context based on `description`. Use the vault MCP tools:
+Query the vault for relevant context based on `description` using the Obsidian CLI:
 
-```
-vault_search_notes query="{relevant terms}" limit=10
+```bash
+obsidian vault="{vault_name}" search query="{relevant terms}" limit=10 format=json 2>/dev/null
 ```
 
 Also gather structural info:

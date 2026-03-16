@@ -23,10 +23,10 @@ Scan the entire vault and produce a health dashboard with statistics, staleness 
 
 ## Phase 1: Scan Vault Structure
 
-Scan the entire vault directory using MCP tools:
+Scan the entire vault directory using Obsidian CLI:
 
-```
-mcp({ tool: "vault_list_directory", args: '{"path": ""}' })
+```bash
+obsidian vault="tpcw-vault" files folder="" 2>/dev/null
 ```
 
 Enumerate all top-level directories, then recurse into each key area:
