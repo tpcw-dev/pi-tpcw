@@ -27,54 +27,72 @@ If `project` is missing, ask for it. Validate it's kebab-case.
 
 ---
 
-## Phase 1: Reconnaissance (vault-scout)
+## Phase 1: Reconnaissance (scout + vault-scout in parallel)
 
-Delegate all discovery to vault-scout. It scans both the project filesystem AND existing vault entries for this project, producing a unified context block.
+Two independent recon tasks — project filesystem and vault state. Run them in parallel since neither depends on the other.
 
 ```json
 {
-  "agent": "vault-scout",
-  "task": "Gather context for project onboarding.\n\n## Domain\n{project} project — full structural and knowledge reconnaissance for vault onboarding\n\n## Scope\n- Vault: {vault_name}\n- Project: {project} at {project_path}\n- Scan depth: {scan_depth}\n\n## Output Path\n/tmp/vault-scout-{project}.md",
+  "tasks": [
+    {
+      "agent": "scout",
+      "task": "Scan project filesystem and produce structured inventory.\n\n## Project\n- Name: {project}\n- Path: {project_path}\n- Scan depth: {scan_depth}\n\n## Output Path\n/tmp/scout-{project}.md"
+    },
+    {
+      "agent": "vault-scout",
+      "task": "Gather existing vault entries for this project.\n\n## Domain\n{project} project — all existing knowledge entries\n\n## Vault Name\n{vault_name}\n\n## Project Scope\n{project}\n\n## Output Path\n/tmp/vault-scout-{project}.md"
+    }
+  ],
   "mode": "spawn"
 }
 ```
 
-After vault-scout completes, read the scout report:
+After both complete, verify:
 
 ```bash
-test -f /tmp/vault-scout-{project}.md && echo "✓ scout report ready" || echo "✗ scout report MISSING"
+test -f /tmp/scout-{project}.md && echo "✓ scout report ready" || echo "✗ scout MISSING"
+test -f /tmp/vault-scout-{project}.md && echo "✓ vault-scout report ready" || echo "✗ vault-scout MISSING"
+```
+
+Read both reports:
+
+```bash
+cat /tmp/scout-{project}.md
 cat /tmp/vault-scout-{project}.md
 ```
 
-The scout report contains:
+**Scout report** provides:
 - **Project Shape** — archetype, language, framework, entry points, source directories
-- **File Inventory** — Tier 1/2 files categorized by type
+- **File Inventory** — Tier 1/2/3 files categorized by type
 - **Annotated File Tree** — directory structure with annotations
-- **Existing Vault Entries** — what the vault already knows about this project
-- **Gaps** — what's missing
 
-If vault-scout fails, halt — the extraction subagents need the inventory to work.
+**Vault-scout report** provides:
+- **Existing Vault Entries** — what the vault already knows about this project
+- **Active Decisions / Open Todos** — current vault state
+- **Gaps** — what the vault is missing
+
+If scout fails, halt — the extraction subagents need the file inventory. If vault-scout fails, continue — we lose dedup-against-vault but extraction can proceed.
 
 ---
 
 ## Phase 2: Parallel Extraction (3 Subagents)
 
-Extract the file inventory, source directories, and project shape from the scout report. Then spawn all three extraction subagents in parallel:
+Extract the file inventory, source directories, and project shape from the **scout report** (`/tmp/scout-{project}.md`). Then spawn all three extraction subagents in parallel:
 
 ```json
 {
   "tasks": [
     {
       "agent": "structure-analyzer",
-      "task": "Analyze project structure and extract components, relationships, and boundaries.\n\n## Project\n- Name: {project}\n- Path: {project_path}\n\n## Scout Report (pre-built inventory)\n{paste relevant sections: Project Shape, File Inventory, Annotated File Tree}\n\n## Output Path\n/tmp/vault-context-structure-{project}.md"
+      "task": "Analyze project structure and extract components, relationships, and boundaries.\n\n## Project\n- Name: {project}\n- Path: {project_path}\n\n## Scout Report (pre-built inventory)\n{paste Project Shape, File Inventory, and Annotated File Tree sections from /tmp/scout-{project}.md}\n\n## Output Path\n/tmp/vault-context-structure-{project}.md"
     },
     {
       "agent": "knowledge-extractor",
-      "task": "Extract knowledge objects from project documentation.\n\n## Project\n- Name: {project}\n- Path: {project_path}\n\n## Files to Read (from scout report)\n### Tier 1 (High Priority)\n{tier_1_files from scout report}\n\n### Tier 2 (Medium Priority)\n{tier_2_files from scout report}\n\n## Output Path\n/tmp/vault-context-knowledge-{project}.md"
+      "task": "Extract knowledge objects from project documentation.\n\n## Project\n- Name: {project}\n- Path: {project_path}\n\n## Files to Read (from scout report)\n### Tier 1 (High Priority)\n{Tier 1 files from /tmp/scout-{project}.md}\n\n### Tier 2 (Medium Priority)\n{Tier 2 files from /tmp/scout-{project}.md}\n\n## Output Path\n/tmp/vault-context-knowledge-{project}.md"
     },
     {
       "agent": "codebase-scanner",
-      "task": "Scan source code to discover modules, workflows, entry points, and data flows.\n\n## Project\n- Name: {project}\n- Path: {project_path}\n- Primary language: {from scout report}\n- Source directories: {from scout report}\n\n## Output Path\n/tmp/vault-context-codebase-{project}.md"
+      "task": "Scan source code to discover modules, workflows, entry points, and data flows.\n\n## Project\n- Name: {project}\n- Path: {project_path}\n- Primary language: {language from scout report}\n- Source directories: {source dirs from scout report}\n\n## Output Path\n/tmp/vault-context-codebase-{project}.md"
     }
   ],
   "mode": "spawn"
@@ -173,7 +191,7 @@ The knowledge-extractor already produces classified entries. Pass through with m
 
 ### 3e. Dedup Against Existing Vault
 
-Use the scout report's "Existing Vault Entries" section. For each new extraction, check if the vault already has this knowledge:
+Use the **vault-scout report** (`/tmp/vault-scout-{project}.md`) "Matched Entries" section. For each new extraction, check if the vault already has this knowledge:
 - **Already exists with same detail** → skip (deduped)
 - **Exists but new version is richer** → flag for update
 - **Doesn't exist** → proceed to write
@@ -296,17 +314,16 @@ Written entries:
 ```
 vault-context (orchestrator — does no file I/O)
 │
-├─ Phase 1: vault-scout (sequential — other phases depend on this)
-│   ├─ Scans project filesystem → file inventory, tiers, project shape
-│   ├─ Searches vault → existing entries for this project
-│   └─ Output: unified scout report
+├─ Phase 1: recon (parallel)
+│   ├─ scout       → project filesystem inventory, tiers, shape
+│   └─ vault-scout → existing vault entries for this project
 │
-├─ Phase 2: 3 extractors (parallel — all receive scout report data)
+├─ Phase 2: extraction (parallel — all receive scout report data)
 │   ├─ structure-analyzer  → components, relationships, boundaries
 │   ├─ knowledge-extractor → decisions, lessons, patterns, ideas, todos
 │   └─ codebase-scanner    → module graph, workflows, state machines, APIs
 │
-├─ Phase 3: merge + classify + dedup (in-skill)
+├─ Phase 3: merge + classify + dedup (in-skill, uses vault-scout for dedup)
 │
 ├─ Phase 4: vault-update (sequential writes)
 │
@@ -315,11 +332,12 @@ vault-context (orchestrator — does no file I/O)
 
 ## Rules
 
-- ALWAYS delegate discovery to vault-scout — never scan files in this skill
+- ALWAYS delegate recon to scout + vault-scout — never scan files in this skill
+- ALWAYS run scout and vault-scout in parallel in Phase 1
 - ALWAYS spawn extraction subagents in parallel — don't serialize what can be concurrent
 - ALWAYS pass scout report data to extraction subagents — they should not re-discover
 - ALWAYS continue the pipeline if one extraction subagent fails — partial > none
-- ALWAYS dedup against existing vault entries (from scout report) before writing
+- ALWAYS dedup against existing vault entries (from vault-scout report) before writing
 - ALWAYS cross-source dedup before writing — same knowledge from docs AND code
 - ALWAYS go through vault-update for writes — never write vault entries directly
 - ALWAYS prioritize patterns first — structural context helps everything downstream
