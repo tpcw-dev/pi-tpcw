@@ -1,11 +1,11 @@
 ---
 name: vault-diagram
-description: Create and update Excalidraw diagrams in the vault. Gathers vault context, prepares a design document, then delegates to draw-diagram for rendering. Triggers on "vault diagram", "visualize vault", "create vault diagram", "update vault diagram".
+description: Create and update Excalidraw diagrams in the vault. Gathers vault context, delegates design doc writing to tech-writer, then delegates rendering to draw-diagram. Pure orchestrator. Triggers on "vault diagram", "visualize vault", "create vault diagram", "update vault diagram".
 ---
 
 # Vault Diagram — Orchestrator
 
-Gathers vault context, prepares a design document, then delegates to `draw-diagram` for rendering. Handles vault-specific placement and git commits.
+Pure orchestrator. Gathers vault context, delegates design doc writing to `tech-writer`, then delegates rendering to `draw-diagram`. Handles vault-specific placement and git commits.
 
 For non-vault diagrams, use `draw-diagram` directly.
 
@@ -30,10 +30,10 @@ For non-vault diagrams, use `draw-diagram` directly.
 
 ### Step 1: Gather Vault Context
 
-Query the vault for relevant context based on `description`:
+Query the vault for relevant context based on `description`. Use the vault MCP tools:
 
-```bash
-obsidian vault="{vault_name}" search query="{relevant terms}" format=json
+```
+vault_search_notes query="{relevant terms}" limit=10
 ```
 
 Also gather structural info:
@@ -41,55 +41,43 @@ Also gather structural info:
 - Relevant decisions, todos, patterns
 - Existing diagrams in the target location
 
-### Step 2: Prepare Design Document
+Compile all results into a raw context block (markdown).
 
-Create a markdown design doc that captures everything `draw-diagram` needs:
+### Step 2: Delegate Design Doc to tech-writer
 
-```markdown
-# {name} — Design Document
+Use the `subagent` tool to delegate to `tech-writer`:
 
-## Goal
-{description}
-
-## Current State
-{gathered vault context — entities, relationships, structure}
-
-## Entities
-- Entity 1: description, role
-- Entity 2: description, role
-...
-
-## Relationships
-- Entity 1 → Entity 2: relationship description
-...
-
-## Flow / Sequence
-1. Step description
-2. Step description
-...
-
-## Notes
-- Additional context for the renderer
+```json
+{
+  "agent": "tech-writer",
+  "task": "Write a design document for a diagram.\n\n## Goal\n{description}\n\n## Raw Context\n{compiled vault context from Step 1}\n\n## Output Path\n{design_doc_path}\n\n## Metadata\n- Type: {type}\n- Depth: {depth}\n- Project: {project}",
+  "mode": "spawn"
+}
 ```
 
-### Step 3: Persist Design Document
+The tech-writer will analyze the raw context, extract entities and relationships, and write a structured design doc to the output path.
 
-Write the design doc to the vault alongside the diagram target:
+### Step 3: Verify Design Doc
 
+After tech-writer completes, verify the design doc exists:
+
+```bash
+test -f {design_doc_path} && echo "✓ Design doc written" || echo "✗ Design doc missing"
 ```
-{target_dir}/{name}.design.md
+
+Read it briefly to confirm it has the expected sections (Entities, Relationships, etc.).
+
+### Step 4: Delegate Rendering to draw-diagram / diagram-renderer
+
+Delegate to `diagram-renderer` subagent:
+
+```json
+{
+  "agent": "diagram-renderer",
+  "task": "Draw an Excalidraw diagram.\n\n- context: {design_doc_path}\n- name: {name}\n- output_path: {diagram_path}\n- type: {type}\n- depth: {depth}",
+  "mode": "spawn"
+}
 ```
-
-This enables future updates without re-gathering context.
-
-### Step 4: Invoke draw-diagram
-
-Delegate to `draw-diagram` with:
-- `context`: the design document (path or content)
-- `name`: the diagram slug
-- `output_path`: the vault diagram path
-- `type`: passed through
-- `depth`: passed through
 
 ### Step 5: Git Commit
 
@@ -103,9 +91,10 @@ git diff --cached --quiet || git commit -m "vault: add - diagram {name} + design
 
 If the diagram already exists:
 1. Read the existing design doc (`{name}.design.md`)
-2. Update it with new context or changes
-3. Re-invoke `draw-diagram` with updated design doc
-4. Git commit: `vault: update - diagram {name}`
+2. Gather fresh vault context
+3. Delegate to `tech-writer` with both the existing design doc and new context — instruct it to update, not rewrite from scratch
+4. Delegate to `diagram-renderer` with updated design doc
+5. Git commit: `vault: update - diagram {name}`
 
 ## Summary
 
@@ -118,6 +107,10 @@ If the diagram already exists:
   Scope:      {system | project}
   Git:        {✓ committed | ⚠️ failed}
 
+  Delegated to:
+    tech-writer      → design doc
+    diagram-renderer → excalidraw rendering
+
   View in Obsidian: Open {name}.excalidraw.md
   To iterate: use train-skill-in-loop-manual with draw-diagram
 ═══════════════════════════════════════
@@ -125,8 +118,9 @@ If the diagram already exists:
 
 ## Rules
 
-- ALWAYS prepare a design document before drawing
+- NEVER write design docs directly — always delegate to tech-writer
+- NEVER generate diagram JSON — always delegate to diagram-renderer
+- ALWAYS gather vault context before delegating (that's your job as orchestrator)
 - ALWAYS persist the design doc alongside the diagram
-- ALWAYS delegate rendering to draw-diagram (never generate JSON directly)
 - ALWAYS git commit after writing
-- Use draw-diagram's output summary to confirm success
+- ALWAYS use spawn mode for subagent delegation (tech-writer and diagram-renderer need no session context)
