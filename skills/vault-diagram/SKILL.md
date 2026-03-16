@@ -1,11 +1,11 @@
 ---
 name: vault-diagram
-description: Create and update Excalidraw diagrams in the vault. Gathers vault context, delegates design doc writing to tech-writer, then delegates rendering to draw-diagram. Pure orchestrator. Triggers on "vault diagram", "visualize vault", "create vault diagram", "update vault diagram".
+description: Create and update Excalidraw diagrams in the vault. Pure orchestrator — delegates to vault-scout (context), tech-writer (design doc), and diagram-renderer (Excalidraw). Triggers on "vault diagram", "visualize vault", "create vault diagram", "update vault diagram".
 ---
 
 # Vault Diagram — Orchestrator
 
-Pure orchestrator. Gathers vault context, delegates design doc writing to `tech-writer`, then delegates rendering to `draw-diagram`. Handles vault-specific placement and git commits.
+Pure orchestrator. Delegates all work to three subagents: `vault-scout` (context gathering), `tech-writer` (design doc), and `diagram-renderer` (Excalidraw rendering). Handles vault-specific placement and git commits.
 
 For non-vault diagrams, use `draw-diagram` directly.
 
@@ -28,29 +28,30 @@ For non-vault diagrams, use `draw-diagram` directly.
 
 ## Process
 
-### Step 1: Gather Vault Context
+### Step 1: Delegate Context Gathering to vault-scout
 
-Query the vault for relevant context based on `description` using the Obsidian CLI:
+Use the `subagent` tool to delegate to `vault-scout`:
 
-```bash
-obsidian vault="{vault_name}" search query="{relevant terms}" limit=10 format=json 2>/dev/null
+```json
+{
+  "agent": "vault-scout",
+  "task": "Gather vault context for a diagram.\n\n## Domain\n{description}\n\n## Vault Name\ntpcw-vault\n\n## Project Scope\n{project or 'vault-wide'}\n\n## Output Path\n{context_path}",
+  "mode": "spawn"
+}
 ```
 
-Also gather structural info:
-- Project list and entry counts
-- Relevant decisions, todos, patterns
-- Existing diagrams in the target location
+Where `{context_path}` is a temp file (e.g., `/tmp/vault-scout-{name}.md`).
 
-Compile all results into a raw context block (markdown).
+The vault-scout will search the vault, read matched entries, gather structural info, and write a compiled context block.
 
-### Step 2: Delegate Design Doc to tech-writer
+### Step 2: Verify Scout Output & Delegate Design Doc to tech-writer
 
-Use the `subagent` tool to delegate to `tech-writer`:
+After vault-scout completes, verify the context file exists, then delegate to `tech-writer`:
 
 ```json
 {
   "agent": "tech-writer",
-  "task": "Write a design document for a diagram.\n\n## Goal\n{description}\n\n## Raw Context\n{compiled vault context from Step 1}\n\n## Output Path\n{design_doc_path}\n\n## Metadata\n- Type: {type}\n- Depth: {depth}\n- Project: {project}",
+  "task": "Write a design document for a diagram.\n\n## Goal\n{description}\n\n## Raw Context\n{read the context file from vault-scout}\n\n## Output Path\n{design_doc_path}\n\n## Metadata\n- Type: {type}\n- Depth: {depth}\n- Project: {project}",
   "mode": "spawn"
 }
 ```
@@ -91,8 +92,8 @@ git diff --cached --quiet || git commit -m "vault: add - diagram {name} + design
 
 If the diagram already exists:
 1. Read the existing design doc (`{name}.design.md`)
-2. Gather fresh vault context
-3. Delegate to `tech-writer` with both the existing design doc and new context — instruct it to update, not rewrite from scratch
+2. Delegate to `vault-scout` to gather fresh vault context
+3. Delegate to `tech-writer` with both the existing design doc and fresh context — instruct it to update, not rewrite from scratch
 4. Delegate to `diagram-renderer` with updated design doc
 5. Git commit: `vault: update - diagram {name}`
 
@@ -108,6 +109,7 @@ If the diagram already exists:
   Git:        {✓ committed | ⚠️ failed}
 
   Delegated to:
+    vault-scout      → context gathering
     tech-writer      → design doc
     diagram-renderer → excalidraw rendering
 
@@ -118,9 +120,10 @@ If the diagram already exists:
 
 ## Rules
 
+- NEVER gather vault context directly — always delegate to vault-scout
 - NEVER write design docs directly — always delegate to tech-writer
 - NEVER generate diagram JSON — always delegate to diagram-renderer
-- ALWAYS gather vault context before delegating (that's your job as orchestrator)
+- ALWAYS delegate in order: vault-scout → tech-writer → diagram-renderer
 - ALWAYS persist the design doc alongside the diagram
 - ALWAYS git commit after writing
-- ALWAYS use spawn mode for subagent delegation (tech-writer and diagram-renderer need no session context)
+- ALWAYS use spawn mode for subagent delegation (all three subagents need no session context)
